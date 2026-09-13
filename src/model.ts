@@ -2,9 +2,12 @@ import type { Row } from './parser'
 import { rawScores, groupStats, finalize, type ArchetypeResult } from './archetypes'
 
 export const POS = ['GK','SW','RWB','RB','RCB','CB','LCB','LB','LWB','RDM','CDM','LDM','RM','RCM','CM','LCM','LM','RAM','CAM','LAM','RF','CF','LF','RW','RS','ST','LS','LW','SUB','RES']
-export const POS_SIMPLE: Record<string, string> = { SW:'CB', RCB:'CB', LCB:'CB', RDM:'CDM', LDM:'CDM', RCM:'CM', LCM:'CM', RAM:'CAM', LAM:'CAM', RF:'CF', LF:'CF', RS:'ST', LS:'ST' }
-export const POS_ORDER = ['GK','CB','LB','RB','LWB','RWB','CDM','CM','CAM','LM','RM','LW','RW','CF','ST']
+export const POS_SIMPLE: Record<string, string> = { SW:'CB', RCB:'CB', LCB:'CB', LWB:'LB', RWB:'RB', RDM:'CDM', LDM:'CDM', RCM:'CM', LCM:'CM', RAM:'CAM', LAM:'CAM', RF:'CF', LF:'CF', RS:'ST', LS:'ST' }
+export const POS_ORDER = ['GK','CB','LB','RB','CDM','CM','CAM','LM','RM','LW','RW','CF','ST']
 export const posGroup = (p: string) => p === 'GK' ? 'GK' : ['CB','LB','RB','LWB','RWB'].includes(p) ? 'DEF' : ['CDM','CM','CAM','LM','RM'].includes(p) ? 'MID' : 'ATT'
+export const POS_GROUPS: [string, string][] = [['G:GK', 'All goalkeepers'], ['G:DEF', 'All defenders'], ['G:MID', 'All midfielders'], ['G:ATT', 'All forwards']]
+/** Position filter: a specific position (any of the player's positions) or a group ("G:DEF"). */
+export const matchesPos = (p: { pos: string; positions: string[] }, f: string) => !f || (f.startsWith('G:') ? posGroup(p.pos) === f.slice(2) : p.positions.includes(f))
 export function posName(code: number) { const p = POS[code] ?? '?'; return POS_SIMPLE[p] ?? p }
 
 export type Names = { first: Record<string, string>; last: Record<string, string>; common: Record<string, string>; byId: Record<string, string> }

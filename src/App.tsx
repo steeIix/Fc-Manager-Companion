@@ -7,7 +7,7 @@ import { Games, Timeline, Youth, Planner, Shortlist } from './Features'
 import { depthIndex, opportunity, lineupIndex, inSavedXI } from './planning'
 import { ARCHETYPES, GROUP_LABEL, archetypeBlurb, type Group } from './archetypes'
 import { Logo, logosEnabled, setLogosEnabled } from './Logo'
-import { buildWorld, fmtMoney, fmtDate, posGroup, POS_ORDER, ATTR_GROUPS, ATTR_LABEL, type World, type Player, type Team, type League, type Names, type ValueModel } from './model'
+import { buildWorld, fmtMoney, fmtDate, posGroup, POS_ORDER, POS_GROUPS, matchesPos, ATTR_GROUPS, ATTR_LABEL, type World, type Player, type Team, type League, type Names, type ValueModel } from './model'
 
 function useClubTheme(colors?: string[]) {
   useEffect(() => {
@@ -201,21 +201,21 @@ function useSort<T>(rows: T[], init: string, get: (r: T, k: string) => any, init
 function LeagueBest({ league, open, pick, world }: { league: League; open: (id: number) => void; pick: (p: Player) => void; world: World }) {
   const [pos, setPos] = useState(''); const [by, setBy] = useState<'ovr' | 'pot' | 'value' | 'growth'>('ovr'); const [n, setN] = useState(25); const [maxAge, setMaxAge] = useState(99)
   const rows = useMemo(() => {
-    const all = league.teams.flatMap(t => t.players).filter(p => (!pos || p.positions.includes(pos)) && p.age <= maxAge)
+    const all = league.teams.flatMap(t => t.players).filter(p => matchesPos(p, pos) && p.age <= maxAge)
     all.sort((a, b) => by === 'ovr' ? b.ovr - a.ovr || b.pot - a.pot : by === 'pot' ? b.pot - a.pot || b.ovr - a.ovr : by === 'value' ? b.value - a.value : (b.pot - b.ovr) - (a.pot - a.ovr) || b.pot - a.pot)
     return all.slice(0, n)
   }, [league, pos, by, n, maxAge])
   return <>
     <h2>Best players in {league.name}</h2>
     <div className="bar">
-      <select aria-label="Position" value={pos} onChange={e => setPos(e.target.value)}><option value="">Any position</option>{POS_ORDER.map(p => <option key={p}>{p}</option>)}</select>
+      <select aria-label="Position" value={pos} onChange={e => setPos(e.target.value)}><option value="">Any position</option><optgroup label="Groups">{POS_GROUPS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</optgroup><optgroup label="Positions">{POS_ORDER.map(p => <option key={p}>{p}</option>)}</optgroup></select>
       <div className="seg">{(['ovr', 'pot', 'value', 'growth'] as const).map(k => <button key={k} className={by === k ? 'on' : ''} onClick={() => setBy(k)}>{{ ovr: 'Overall', pot: 'Potential', value: 'Value', growth: 'Room to grow' }[k]}</button>)}</div>
       <span className="range">Max age <input type="number" value={maxAge} onChange={e => setMaxAge(+e.target.value || 99)} /></span>
       <div className="seg">{[10, 25, 50, 100].map(k => <button key={k} className={n === k ? 'on' : ''} onClick={() => setN(k)}>Top {k}</button>)}</div>
     </div>
     <Table className="tbl"><thead><tr><th className="num">#</th><th>Player</th><th>Pos</th><th className="num">Age</th><th>Nation</th><th>Club</th><th className="num">OVR</th><th className="num">POT</th><th className="num">Value</th><th className="num">Contract</th></tr></thead><tbody>
       {rows.map((p, i) => <tr key={p.id} className="click" onClick={() => pick(p)}>
-        <td className="num dim">{i + 1}</td><td className="name"><span className={p.known ? '' : 'unk'}>{p.name}</span></td><td><Pos p={p.pos} />{pos && p.pos !== pos && <span className="dim" style={{ marginLeft: 6, fontSize: 12 }}>also {pos}</span>}</td>
+        <td className="num dim">{i + 1}</td><td className="name"><span className={p.known ? '' : 'unk'}>{p.name}</span></td><td><Pos p={p.pos} />{pos && !pos.startsWith('G:') && p.pos !== pos && <span className="dim" style={{ marginLeft: 6, fontSize: 12 }}>also {pos}</span>}</td>
         <td className="num">{p.age}</td><td>{p.nation}</td><td><a href="#" className="with-crest" onClick={e => { e.preventDefault(); e.stopPropagation(); open(p.teamId) }}>{world.teamById.get(p.teamId) && <Logo team={world.teamById.get(p.teamId)!} size={18} />}{p.team}</a></td>
         <td className="num"><Rating v={p.ovr} /></td><td className="num"><Rating v={p.pot} /></td><td className="num">{fmtMoney(p.value)}</td><td className="num">{p.contractUntil || '–'}</td>
       </tr>)}
@@ -355,7 +355,7 @@ function Search({ world, pick, openClub }: { world: World; pick: (p: Player) => 
     const s = q.trim().toLowerCase()
     return world.players.filter(p => !youthIds.has(p.id) &&
       (!contract || (p.contractUntil > 0 && p.contractUntil <= Number(contract))) && (!foot || p.foot === foot) && (!minGrowth || p.pot - p.ovr >= Number(minGrowth)) && (!minSkill || p.skill >= Number(minSkill)) && (!minWeak || p.weak >= Number(minWeak)) && (!fit || !p.injury) && (!notLoan || !p.onLoanFrom) &&
-      opportunities.get(p.id)!.ahead.length >= minAhead && (role === 'all' || (role === 'backup' && opportunities.get(p.id)!.blocked) || (role === 'best' && opportunities.get(p.id)!.rank !== null && (opportunities.get(p.id)!.slots ?? 0) > 0 && !opportunities.get(p.id)!.blocked) || (role === 'buried' && opportunities.get(p.id)!.blocked && opportunities.get(p.id)!.ahead.length >= 2) || (role === 'bench' && p.teamId >= 0 && ['SUB','RES'].includes(p.squadPos)) || (role === 'xi' && p.teamId >= 0 && inSavedXI(p))) && (g === 'all' || p.gender === g) && (!pos || (includeSecondary ? p.positions.includes(pos) : p.pos === pos)) && p.ovr >= ovr[0] && p.ovr <= ovr[1] && p.pot >= pot[0] && p.pot <= pot[1] && p.age >= age[0] && p.age <= age[1] && (!arch || p.archetype.id === arch) && (!tag || p.archetype.tags.includes(tag)) && (lg === -2 ? !specialLeagues.has(p.leagueId) : p.leagueId === lg) && (!s || p.name.toLowerCase().includes(s) || p.team.toLowerCase().includes(s) || p.nation.toLowerCase().includes(s)))
+      opportunities.get(p.id)!.ahead.length >= minAhead && (role === 'all' || (role === 'backup' && opportunities.get(p.id)!.blocked) || (role === 'best' && opportunities.get(p.id)!.rank !== null && (opportunities.get(p.id)!.slots ?? 0) > 0 && !opportunities.get(p.id)!.blocked) || (role === 'buried' && opportunities.get(p.id)!.blocked && opportunities.get(p.id)!.ahead.length >= 2) || (role === 'bench' && p.teamId >= 0 && ['SUB','RES'].includes(p.squadPos)) || (role === 'xi' && p.teamId >= 0 && inSavedXI(p))) && (g === 'all' || p.gender === g) && (!pos || (pos.startsWith('G:') ? matchesPos(p, pos) : includeSecondary ? p.positions.includes(pos) : p.pos === pos)) && p.ovr >= ovr[0] && p.ovr <= ovr[1] && p.pot >= pot[0] && p.pot <= pot[1] && p.age >= age[0] && p.age <= age[1] && (!arch || p.archetype.id === arch) && (!tag || p.archetype.tags.includes(tag)) && (lg === -2 ? !specialLeagues.has(p.leagueId) : p.leagueId === lg) && (!s || p.name.toLowerCase().includes(s) || p.team.toLowerCase().includes(s) || p.nation.toLowerCase().includes(s)))
   }, [world, q, g, pos, ovr, pot, age, arch, tag, lg, specialLeagues, role, contract, foot, minGrowth, minSkill, minWeak, fit, notLoan, depth, youthIds, opportunities, minAhead, includeSecondary])
   const allTags = useMemo(() => Array.from(new Set(world.players.flatMap(p => p.archetype.tags))).sort(), [world])
   const showDepth = adv || role !== 'all' || minAhead > 0
@@ -368,7 +368,7 @@ function Search({ world, pick, openClub }: { world: World; pick: (p: Player) => 
     <div className="bar">
       <input type="text" placeholder="Name, club or nation" value={q} onChange={e => setQ(e.target.value)} />
       <div className="seg"><button className={g === 'all' ? 'on' : ''} onClick={() => setG('all')}>All</button><button className={g === 0 ? 'on' : ''} onClick={() => setG(0)}>Men</button><button className={g === 1 ? 'on' : ''} onClick={() => setG(1)}>Women</button></div>
-      <select aria-label="Search position" value={pos} onChange={e => setPos(e.target.value)}><option value="">Any position</option>{POS_ORDER.map(p => <option key={p}>{p}</option>)}</select>
+      <select aria-label="Search position" value={pos} onChange={e => setPos(e.target.value)}><option value="">Any position</option><optgroup label="Groups">{POS_GROUPS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</optgroup><optgroup label="Positions">{POS_ORDER.map(p => <option key={p}>{p}</option>)}</optgroup></select>
       <select value={lg} onChange={e => setLg(+e.target.value)}><option value={-2}>Any club league</option><option value={-1}>Free agents</option>{world.leagues.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select>
     </div>
     <div className="bar">
