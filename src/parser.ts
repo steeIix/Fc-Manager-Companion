@@ -33,10 +33,13 @@ export function parseSave(buf: ArrayBuffer, meta: Meta): Record<string, Row[]> {
   while (true) {
     const i = findSig(d, off)
     if (i < 0) break
+    if (i + 24 > d.length) throw new Error('Truncated database header.')
     const size = dv.getUint32(i + 8, true)
+    if (size < 24 || i + size > d.length) throw new Error('Invalid or truncated database size.')
     const base = i
     off = i + size
     const tc = dv.getUint32(base + 16, true)
+    if (24 + tc * 8 + 4 > size) throw new Error('Invalid database directory.')
     let p = base + 24
     const ents: [string, number][] = []
     for (let t = 0; t < tc; t++) { ents.push([td.decode(d.subarray(p, p + 4)), dv.getUint32(p + 4, true)]); p += 8 }
@@ -45,16 +48,19 @@ export function parseSave(buf: ArrayBuffer, meta: Meta): Record<string, Row[]> {
     for (const [short, o] of ents) {
       const name = meta.tables[short]
       if (!name) continue
+      if (start + o + 36 > base + size) throw new Error('Invalid table header.')
       let q = start + o + 4
       const rs = dv.getUint32(q, true); q += 14
       const vr = dv.getUint16(q, true); q += 6
       const fc = d[q]; q += 12
+      if (!rs || q + fc * 16 + vr * rs > base + size) throw new Error('Invalid table record bounds.')
       const fm = meta.fields[name] || {}
       const fl: { t: number; bo: number; n: string; bd: number; rl: number }[] = []
       for (let f = 0; f < fc; f++) {
         const t = dv.getUint32(q, true), bo = dv.getUint32(q + 4, true)
         const fs = td.decode(d.subarray(q + 8, q + 12)), bd = dv.getUint32(q + 12, true)
         q += 16
+        if (bo + bd > rs * 8 || (t === 4 && bo + 32 > rs * 8)) throw new Error('Invalid field bounds.')
         const m = fm[fs]
         fl.push({ t, bo, n: m ? m[0] : fs, bd, rl: m ? m[1] : 0 })
       }

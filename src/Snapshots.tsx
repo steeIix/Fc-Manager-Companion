@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Timeline } from './Features'
 import { fmtMoney, fmtDate, posGroup } from './model'
 import { listSnapshots, getSnapshot, deleteSnapshot, renameSnapshot, type SnapMeta, type Snapshot, type PSnap } from './snapshots'
 
@@ -8,25 +9,27 @@ const Delta = ({ d }: { d: number }) => <span className={'delta ' + (d > 0 ? 'up
 const D = (ms: number) => fmtDate(new Date(ms))
 const title = (m: SnapMeta) => m.label || `${m.club || 'Save'} · ${D(m.asOf)}`
 
-export function Snapshots({ currentId, refresh }: { currentId?: string; refresh: number }) {
+export function Snapshots({ currentId, refresh, gameId }: { currentId?: string; refresh: number; gameId: string }) {
+  const [playerId, setPlayerId] = useState<number | null>(null)
+  const [err, setErr] = useState('')
   const [list, setList] = useState<SnapMeta[]>([])
   const [a, setA] = useState(''); const [b, setB] = useState('')
   const [A, setSA] = useState<Snapshot | null>(null); const [B, setSB] = useState<Snapshot | null>(null)
   const [editing, setEditing] = useState<string | null>(null); const [label, setLabel] = useState('')
-  const reload = () => listSnapshots().then(l => { setList(l); if (!a && l.length > 1) setA(l[l.length - 2].id); if (!b && l.length) setB(l[l.length - 1].id) })
+  const reload = () => listSnapshots(gameId).then(l => { setList(l); if (!a && l.length > 1) setA(l[l.length - 2].id); if (!b && l.length) setB(l[l.length - 1].id) }).catch(e => setErr(String(e)))
   useEffect(() => { reload() }, [refresh])
-  useEffect(() => { if (a) getSnapshot(a).then(s => setSA(s ?? null)); else setSA(null) }, [a])
-  useEffect(() => { if (b) getSnapshot(b).then(s => setSB(s ?? null)); else setSB(null) }, [b])
+  useEffect(() => { let live = true; setSA(null); if (a) getSnapshot(a).then(s => { if (live) setSA(s ?? null) }).catch(e => setErr(String(e))); return () => { live = false } }, [a])
+  useEffect(() => { let live = true; setSB(null); if (b) getSnapshot(b).then(s => { if (live) setSB(s ?? null) }).catch(e => setErr(String(e))); return () => { live = false } }, [b])
 
   return <>
-    <h1>Snapshots</h1>
+    <h1>Snapshots</h1>{err && <p className="err">{err}</p>}
     <p className="sub">Every save you open is kept here in your browser. Pick two to see who improved, who declined, and who came and went.</p>
     {list.length === 0 ? <p className="sub">No snapshots yet. Open a save and it will appear here.</p> :
       <table className="tbl"><thead><tr><th>Snapshot</th><th>In-game date</th><th className="num">Season</th><th>Club</th><th>File</th><th className="num">Players</th><th>Saved</th><th></th></tr></thead><tbody>
         {list.map(m => <tr key={m.id} className={m.id === currentId ? 'user' : ''}>
-          <td className="name">{editing === m.id ? <span className="bar" style={{ margin: 0 }}><input type="text" value={label} onChange={e => setLabel(e.target.value)} /><button className="btn" onClick={async () => { await renameSnapshot(m.id, label); setEditing(null); reload() }}>Save</button></span> : <>{title(m)}{m.id === currentId && <span className="tag">Open now</span>}</>}</td>
+          <td className="name">{editing === m.id ? <span className="bar" style={{ margin: 0 }}><input type="text" value={label} onChange={e => setLabel(e.target.value)} /><button className="btn" onClick={async () => { try { await renameSnapshot(m.id, label); setEditing(null); reload() } catch (e) { setErr(String(e)) } }}>Save</button></span> : <>{title(m)}{m.id === currentId && <span className="tag">Open now</span>}</>}</td>
           <td>{D(m.asOf)}</td><td className="num">{m.season}</td><td>{m.club || '–'}</td><td className="dim file" title={m.fileName}>{m.fileName}</td><td className="num">{m.playerCount.toLocaleString()}</td><td className="dim">{D(m.savedAt)}</td>
-          <td><button className="btn" onClick={() => { setEditing(m.id); setLabel(m.label) }}>Rename</button> <button className="btn" onClick={async () => { if (confirm('Delete this snapshot?')) { await deleteSnapshot(m.id); if (a === m.id) setA(''); if (b === m.id) setB(''); reload() } }}>Delete</button></td>
+          <td><button className="btn" onClick={() => { setEditing(m.id); setLabel(m.label) }}>Rename</button> <button className="btn" onClick={async () => { if (confirm('Delete this snapshot and its stored save file?')) { try { await deleteSnapshot(m.id); if (a === m.id) setA(''); if (b === m.id) setB(''); reload() } catch (e) { setErr(String(e)) } } }}>Delete</button></td>
         </tr>)}
       </tbody></table>}
     {list.length >= 2 && <>
@@ -36,12 +39,13 @@ export function Snapshots({ currentId, refresh }: { currentId?: string; refresh:
         <span style={{ color: 'var(--ink-3)' }}>to</span>
         <select value={b} onChange={e => setB(e.target.value)}><option value="">Later snapshot…</option>{list.map(m => <option key={m.id} value={m.id}>{title(m)}</option>)}</select>
       </div>
-      {A && B && A.id !== B.id && <Compare A={A} B={B} />}
+      {A && B && A.id !== B.id && <Compare A={A} B={B} pick={setPlayerId} />}
     </>}
+    {playerId !== null && <div className="overlay" onClick={() => setPlayerId(null)}><div className="modal" onClick={e => e.stopPropagation()}><button className="x" aria-label="Close timeline" onClick={() => setPlayerId(null)}>✕</button><Timeline id={playerId} gameId={gameId} refresh={refresh} /></div></div>}
   </>
 }
 
-function Compare({ A, B }: { A: Snapshot; B: Snapshot }) {
+function Compare({ A, B, pick }: { A: Snapshot; B: Snapshot; pick: (id: number) => void }) {
   const [clubId, setClubId] = useState(B.clubId || A.clubId)
   const [gender, setGender] = useState<'all' | 0 | 1>('all')
   const [minOvr, setMinOvr] = useState(60)
@@ -70,7 +74,7 @@ function Compare({ A, B }: { A: Snapshot; B: Snapshot }) {
   const days = Math.round((Y.asOf - X.asOf) / 86400000)
 
   const PlayerRow = ({ r }: { r: { x: PSnap; y: PSnap; d: number; dp: number; dv: number } }) => <tr>
-    <td className="name">{r.y.n}</td><td><Pos p={r.y.pos} /></td><td className="num">{r.y.age}</td><td>{r.y.team}{r.y.t !== r.x.t && <span className="tag" title={`Was at ${r.x.team}`}>from {r.x.team}</span>}</td>
+    <td className="name"><button className="text-btn" onClick={() => pick(r.y.id)}>{r.y.n}</button></td><td><Pos p={r.y.pos} /></td><td className="num">{r.y.age}</td><td>{r.y.team}{r.y.t !== r.x.t && <span className="tag" title={`Was at ${r.x.team}`}>from {r.x.team}</span>}</td>
     <td className="num"><Rating v={r.x.ovr} /> → <Rating v={r.y.ovr} /></td><td className="num"><Delta d={r.d} /></td><td className="num">{r.x.pot} → {r.y.pot}{r.dp !== 0 && <> <Delta d={r.dp} /></>}</td><td className="num">{fmtMoney(r.y.v)}{r.dv !== 0 && <> <span className={'delta ' + (r.dv > 0 ? 'up' : 'down')}>{r.dv > 0 ? '+' : '−'}{fmtMoney(Math.abs(r.dv))}</span></>}</td>
   </tr>
   const head = <thead><tr><th>Player</th><th>Pos</th><th className="num">Age</th><th>Club</th><th className="num">Overall</th><th className="num">Δ</th><th className="num">Potential</th><th className="num">Value</th></tr></thead>
@@ -87,10 +91,10 @@ function Compare({ A, B }: { A: Snapshot; B: Snapshot }) {
       <span className="count">{data.left.length} left · {data.joined.length} joined · {data.stayed.length} stayed</span></div>
     <div className="two">
       <div><h3 className="h3">Left the club</h3>{data.left.length === 0 ? <p className="dim">Nobody left.</p> : <table className="tbl"><thead><tr><th>Player</th><th>Pos</th><th className="num">OVR then</th><th>Now at</th></tr></thead><tbody>
-        {data.left.map(({ p, now }) => <tr key={p.id}><td className="name">{p.n}</td><td><Pos p={p.pos} /></td><td className="num"><Rating v={p.ovr} /></td><td>{now ? <>{now.team} <Rating v={now.ovr} /></> : <span className="dim">Retired / not in save</span>}</td></tr>)}
+        {data.left.map(({ p, now }) => <tr key={p.id}><td className="name"><button className="text-btn" onClick={() => pick(p.id)}>{p.n}</button></td><td><Pos p={p.pos} /></td><td className="num"><Rating v={p.ovr} /></td><td>{now ? <>{now.team} <Rating v={now.ovr} /></> : <span className="dim">Retired / not in save</span>}</td></tr>)}
       </tbody></table>}</div>
       <div><h3 className="h3">Joined the club</h3>{data.joined.length === 0 ? <p className="dim">No arrivals.</p> : <table className="tbl"><thead><tr><th>Player</th><th>Pos</th><th className="num">Age</th><th className="num">OVR / POT</th><th>From</th></tr></thead><tbody>
-        {data.joined.map(({ p, was }) => <tr key={p.id}><td className="name">{p.n}</td><td><Pos p={p.pos} /></td><td className="num">{p.age}</td><td className="num"><Rating v={p.ovr} /> <Rating v={p.pot} /></td><td>{was ? <>{was.team} {was.ovr !== p.ovr && <Delta d={p.ovr - was.ovr} />}</> : <span className="dim">New (youth / generated)</span>}</td></tr>)}
+        {data.joined.map(({ p, was }) => <tr key={p.id}><td className="name"><button className="text-btn" onClick={() => pick(p.id)}>{p.n}</button></td><td><Pos p={p.pos} /></td><td className="num">{p.age}</td><td className="num"><Rating v={p.ovr} /> <Rating v={p.pot} /></td><td>{was ? <>{was.team} {was.ovr !== p.ovr && <Delta d={p.ovr - was.ovr} />}</> : <span className="dim">New (youth / generated)</span>}</td></tr>)}
       </tbody></table>}</div>
     </div>
     <h3 className="h3">Development of players who stayed</h3>
@@ -105,10 +109,10 @@ function Compare({ A, B }: { A: Snapshot; B: Snapshot }) {
 
     <div className="two">
       <div><h2>New faces since {D(X.asOf)}</h2><table className="tbl"><thead><tr><th>Player</th><th>Pos</th><th className="num">Age</th><th>Club</th><th className="num">OVR / POT</th></tr></thead><tbody>
-        {data.newPlayers.map(p => <tr key={p.id}><td className="name">{p.n}</td><td><Pos p={p.pos} /></td><td className="num">{p.age}</td><td>{p.team}</td><td className="num"><Rating v={p.ovr} /> <Rating v={p.pot} /></td></tr>)}
+        {data.newPlayers.map(p => <tr key={p.id}><td className="name"><button className="text-btn" onClick={() => pick(p.id)}>{p.n}</button></td><td><Pos p={p.pos} /></td><td className="num">{p.age}</td><td>{p.team}</td><td className="num"><Rating v={p.ovr} /> <Rating v={p.pot} /></td></tr>)}
       </tbody></table></div>
       <div><h2>No longer in the game</h2><table className="tbl"><thead><tr><th>Player</th><th>Pos</th><th className="num">Age then</th><th>Last club</th><th className="num">OVR then</th></tr></thead><tbody>
-        {data.gone.map(p => <tr key={p.id}><td className="name">{p.n}</td><td><Pos p={p.pos} /></td><td className="num">{p.age}</td><td>{p.team}</td><td className="num"><Rating v={p.ovr} /></td></tr>)}
+        {data.gone.map(p => <tr key={p.id}><td className="name"><button className="text-btn" onClick={() => pick(p.id)}>{p.n}</button></td><td><Pos p={p.pos} /></td><td className="num">{p.age}</td><td>{p.team}</td><td className="num"><Rating v={p.ovr} /></td></tr>)}
       </tbody></table></div>
     </div>
 

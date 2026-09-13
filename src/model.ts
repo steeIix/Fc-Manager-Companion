@@ -30,7 +30,8 @@ export interface Career {
   manager: string; clubId: number; club?: Team; season: number; asOf: Date; wage: number
   history: Row[]; contracts: Map<number, Row>
 }
-export interface World { players: Player[]; teams: Team[]; leagues: League[]; career: Career; playerById: Map<number, Player>; teamById: Map<number, Team> }
+export interface YouthPlayer { id: number; name: string; player?: Player; months: number | null; variance: number | null; swing: number | null; tier: number | null; raw: Row }
+export interface World { youth: YouthPlayer[]; scouts: Row[]; players: Player[]; teams: Team[]; leagues: League[]; career: Career; playerById: Map<number, Player>; teamById: Map<number, Team> }
 
 const ATTR_KEYS = ['acceleration','sprintspeed','positioning','finishing','shotpower','longshots','volleys','penalties','vision','crossing','freekickaccuracy','shortpassing','longpassing','curve','dribbling','agility','balance','reactions','ballcontrol','composure','interceptions','headingaccuracy','defensiveawareness','standingtackle','slidingtackle','jumping','stamina','strength','aggression','gkdiving','gkhandling','gkkicking','gkpositioning','gkreflexes']
 export const ATTR_GROUPS: [string, string[]][] = [
@@ -96,8 +97,9 @@ export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Reco
 
   // Current in-game date isn't stored directly: use the latest dated event/contract change.
   let latest = 0
-  for (const r of t.persistent_events ?? []) latest = Math.max(latest, r.eventdate as number)
-  for (const r of t.career_playercontract ?? []) latest = Math.max(latest, r.last_status_change_date as number, r.contract_date as number)
+  const dateValue = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 19000101 && v <= 21991231 ? v : 0
+  for (const r of t.persistent_events ?? []) latest = Math.max(latest, dateValue(r.eventdate))
+  for (const r of t.career_playercontract ?? []) latest = Math.max(latest, dateValue(r.last_status_change_date), dateValue(r.contract_date))
   const asOf = latest > 19000000 ? yyyymmdd(latest) : new Date()
   const loans = new Map<number, Row>(); for (const r of t.playerloans ?? []) if (lilianToDate(r.loandateend as number) >= asOf) loans.set(r.playerid as number, r)
 
@@ -193,5 +195,19 @@ export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Reco
     manager: (u.commonname as string) || [u.firstname, u.surname].filter(Boolean).join(' ') || 'Manager', clubId: u.clubteamid as number, club,
     season: u.seasoncount as number, asOf, wage: u.wage as number, history: (t.career_managerhistory ?? []).slice().sort((a, b) => (a.season as number) - (b.season as number)), contracts,
   }
-  return { players, teams, leagues, career, playerById, teamById }
+  const youth = (t.career_youthplayers ?? []).map(r => {
+    const p = playerById.get(Number(r.playerid))
+    const val = (k: string) => typeof r[k] === 'number' ? r[k] as number : null
+    return { id: Number(r.playerid), name: p?.name ?? `Youth #${r.playerid}`, player: p, months: val('monthsinsquad'), variance: val('potentialvariance'), swing: val('swinglowpotential'), tier: val('playertier'), raw: r }
+  })
+  // Academy players are tracked separately; they are not free agents or senior squad options.
+  const youthIds = new Set(youth.map(y => y.id))
+  for (const tm of teams) {
+    tm.players = tm.players.filter(p => !youthIds.has(p.id))
+    tm.squadSize = tm.players.length
+    tm.squadValue = tm.players.reduce((n, p) => n + p.value, 0)
+    tm.avgAge = tm.players.length ? +(tm.players.reduce((n, p) => n + p.age, 0) / tm.players.length).toFixed(1) : 0
+  }
+  for (const y of youth) if (y.player) { y.player.team = `${club?.name ?? 'My club'} · Youth`; y.player.teamId = club?.id ?? -1 }
+  return { players, teams, leagues, career, playerById, teamById, youth, scouts: t.career_scouts ?? [] }
 }

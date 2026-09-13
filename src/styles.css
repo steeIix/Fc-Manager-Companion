@@ -155,3 +155,41 @@ h2 { font-family: var(--display); font-weight: 600; font-size: 24px; margin: 26p
 .main { overflow-x: hidden; }
 .tbl { display: block; overflow-x: auto; }
 .tbl thead, .tbl tbody { display: table; width: 100%; }
+
+/* Career workspaces and planning */
+.games-panel { max-width: 1400px; margin: 0 auto; padding: 32px; }
+.main .games-panel { padding: 0; }
+.games-panel .bar { flex-wrap: wrap; }
+.club-tabs { margin: 20px 0 28px; }
+.star-btn { border: 0; background: transparent; color: var(--gold); font-size: 24px; cursor: pointer; padding: 2px 7px; }
+.text-btn { background: transparent; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.text-btn:hover { color: var(--gold); }
+.timeline { border-top: 1px solid var(--line, #ddd); margin-top: 24px; padding-top: 12px; }
+.timeline-chart { display: block; width: 100%; max-height: 300px; margin: 12px 0; overflow: visible; }
+.timeline-chart text { fill: currentColor; font-size: 12px; }
+.table-scroll { overflow: auto; max-height: 340px; }
+.advanced-filters { align-items: end; flex-wrap: wrap; padding: 16px; background: var(--paper, #f4f4ee); border-radius: 10px; }
+.advanced-filters label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
+.advanced-filters input[type=number] { width: 125px; }
+.planning-layout { display: grid; grid-template-columns: minmax(400px, 1.5fr) minmax(240px, 1fr); gap: 24px; }
+.pitch { border: 2px solid #94b1a3; border-radius: 12px; padding: 24px 14px; background: repeating-linear-gradient(0deg, #173f31 0px, #173f31 70px, #1a4737 70px, #1a4737 140px); display: flex; flex-direction: column; justify-content: space-between; gap: 22px; color: white; }
+.pitch-row { display: flex; justify-content: space-around; gap: 8px; }
+.pitch-slot { flex: 1; text-align: center; min-width: 0; }
+.pitch-slot > span { display: block; font-size: 11px; color: #bdd8ca; margin-bottom: 5px; }
+.pitch-slot button { width: 100%; border: 1px solid #789b87; background: #102c24ed; color: #fff; border-radius: 7px; padding: 10px 5px; cursor: pointer; }
+.pitch-slot b { font-size: 12px; overflow-wrap: anywhere; }
+.pitch-slot small { display: block; color: #d6e1b2; margin-top: 5px; font-size: 10px; }
+.needs { padding: 18px; border: 1px solid #bcb9a5; border-radius: 12px; }
+.needs li { margin: 0 0 10px; }
+.depth-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(270px,1fr)); gap: 16px; margin-top: 24px; }
+.depth-card { border: 1px solid #bcb9a5; padding: 16px; border-radius: 10px; }
+.depth-card h3 small { font-weight: 400; font-size: 12px; display: block; margin-top: 4px; }
+.depth-card ol { padding-left: 22px; }
+.depth-card li { padding: 8px 0; }
+.depth-card li small { display: block; margin-top: 4px; color: var(--ink-2); font-size: 11px; }
+.warning { color: #b44929; }
+button:focus-visible, input:focus-visible, select:focus-visible, circle:focus-visible { outline: 2px solid #af862f; outline-offset: 3px; }
+@media(max-width:850px) { .planning-layout { grid-template-columns: 1fr; } .games-panel { padding: 18px; } }
+.game-controls { border: 0; padding: 0; margin: 0; min-width: 0; }
+.landing-history { margin: 10px 32px; padding: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.landing-history summary { cursor: pointer; font-weight: 600; margin-bottom: 14px; }
