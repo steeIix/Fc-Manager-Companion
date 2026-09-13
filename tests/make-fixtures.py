@@ -24,7 +24,7 @@ def fixture(later=False):
       'career_users':[dict(clubteamid=1,commonname='Test Manager',seasoncount=4,wage=10000)],
       'persistent_events':[dict(eventdate=20291001 if later else 20290101)],
       'career_youthplayers':[dict(playerid=i,monthsinsquad=2,potentialvariance=5,swinglowpotential=-3,playertier=2) for i in [112,113]],
-      'career_managerhistory':[dict(season=1,teamid=1,leagueid=1,tableposition=3,games_played=54,wins=29,draws=10,losses=15,goals_for=109,goals_against=76,points=96,bigbuyplayername='Long transfer name',bigbuyamount=57000000,jobsecurityscore=100),dict(season=1,teamid=2,leagueid=1,tableposition=9,games_played=1,wins=0,draws=1,losses=0,goals_for=1,goals_against=1,points=1,jobsecurityscore=80)],
+      'career_managerhistory':[dict(season=3,teamid=1,leagueid=1,tableposition=0,games_played=55,wins=32,draws=13,losses=10,goals_for=103,goals_against=58,points=109,jobsecurityscore=100),dict(season=1,teamid=1,leagueid=1,tableposition=3,games_played=54,wins=29,draws=10,losses=15,goals_for=109,goals_against=76,points=96,bigbuyplayername='Long transfer name',bigbuyamount=57000000,jobsecurityscore=100),dict(season=1,teamid=2,leagueid=1,tableposition=9,games_played=1,wins=0,draws=1,losses=0,goals_for=1,goals_against=1,points=1,jobsecurityscore=80)],
       'career_scouts':[dict(scoutid=1,firstname='Test',lastname='Scout',experience=4,knowledge=5,regionid=1,state=2)]}
     chunks=[]
     for name,rows in tables.items():

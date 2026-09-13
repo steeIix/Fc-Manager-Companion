@@ -7,7 +7,7 @@ export const posGroup = (p: string) => p === 'GK' ? 'GK' : ['CB','LB','RB','LWB'
 export function posName(code: number) { const p = POS[code] ?? '?'; return POS_SIMPLE[p] ?? p }
 
 export type Names = { first: Record<string, string>; last: Record<string, string>; common: Record<string, string>; byId: Record<string, string> }
-export type ValueModel = { ovr: Record<string, number>; age: Record<string, number>; grp: number[]; d: number[] }
+export type ValueModel = { ovrMin: number; ovr: number[]; ageMin: number; age: number[]; grp: number[]; k: number[] }
 
 export interface Player {
   id: number; name: string; shortName: string; known: boolean; gender: number
@@ -48,34 +48,28 @@ export const ATTR_LABEL: Record<string, string> = { acceleration:'Acceleration',
 const LILIAN = Date.UTC(1582, 9, 14)
 export const lilianToDate = (d: number) => new Date(LILIAN + d * 86400000)
 const yyyymmdd = (n: number) => new Date(Date.UTC(Math.floor(n / 10000), Math.floor(n / 100) % 100 - 1, n % 100))
-export const fmtDate = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
 export function ageAt(birth: Date, at: Date) {
   let a = at.getUTCFullYear() - birth.getUTCFullYear()
   if (at.getUTCMonth() < birth.getUTCMonth() || (at.getUTCMonth() === birth.getUTCMonth() && at.getUTCDate() < birth.getUTCDate())) a--
   return a
 }
-
-export function stars(ovr: number) {
-  return ovr >= 83 ? 5 : ovr >= 79 ? 4.5 : ovr >= 75 ? 4 : ovr >= 71 ? 3.5 : ovr >= 69 ? 3 : ovr >= 67 ? 2.5 : ovr >= 65 ? 2 : ovr >= 63 ? 1.5 : ovr >= 60 ? 1 : 0.5
+export const stars = (ovr: number) => ovr >= 83 ? 5 : ovr >= 79 ? 4.5 : ovr >= 75 ? 4 : ovr >= 71 ? 3.5 : ovr >= 69 ? 3 : ovr >= 67 ? 2.5 : ovr >= 65 ? 2 : ovr >= 63 ? 1.5 : ovr >= 60 ? 1 : 0.5
+/** Market value estimate. Fitted on FC 26 launch values: rating curve × age curve × position, plus potential-gap and youth interactions. */
+export function estimateValue(vm: ValueModel, ovr: number, age: number, pot: number, group: string) {
+  const o = Math.min(Math.max(ovr, vm.ovrMin), vm.ovrMin + vm.ovr.length - 1), a = Math.min(Math.max(age, vm.ageMin), vm.ageMin + vm.age.length - 1)
+  const d = Math.max(pot - ovr, 0), ay = Math.max(0, 27 - a), g = ['GK', 'DEF', 'MID', 'ATT'].indexOf(group), k = vm.k
+  const log = vm.ovr[o - vm.ovrMin] + vm.age[a - vm.ageMin] + vm.grp[g] + k[0] * d + k[1] * d * d + k[2] * d * ay + k[3] * (o - 70) * (a - 27) + k[4] * g * d + k[5] * (o - 70) * ay
+  const v = Math.exp(log)
+  const step = v >= 5e7 ? 1e6 : v >= 1e7 ? 5e5 : v >= 1e6 ? 1e5 : v >= 1e5 ? 1e4 : 1e3
+  return Math.round(v / step) * step
 }
-
-export function fmtMoney(v: number) {
+export const fmtDate = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+export function fmtMoney(v: number | null | undefined) {
+  if (v == null || !Number.isFinite(v)) return '—'
   if (v >= 1e9) return `€${(v / 1e9).toFixed(2)}B`
   if (v >= 1e6) return `€${(v / 1e6).toFixed(v >= 1e7 ? 0 : 1)}M`
   if (v >= 1e3) return `€${Math.round(v / 1e3)}K`
   return `€${v}`
-}
-
-function estimateValue(vm: ValueModel, ovr: number, age: number, pot: number, group: string) {
-  const o = Math.min(Math.max(ovr, 40), 99), a = Math.min(Math.max(age, 15), 45)
-  let oc = vm.ovr[String(o)]
-  if (o > 91) { const s = (vm.ovr['91'] - vm.ovr['88']) / 3; oc = vm.ovr['91'] + s * (o - 91) }
-  const d = Math.max(pot - ovr, 0)
-  const g = ['GK','DEF','MID','ATT'].indexOf(group)
-  const log = oc + vm.age[String(a)] + vm.grp[g] + vm.d[0] * d + vm.d[1] * d * d
-  const v = Math.exp(log)
-  const step = v >= 1e7 ? 5e5 : v >= 1e6 ? 1e5 : v >= 1e5 ? 1e4 : 1e3
-  return Math.round(v / step) * step
 }
 
 const wavg = (r: Row, w: [string, number][]) => Math.round(w.reduce((s, [k, x]) => s + (r[k] as number) * x, 0))
@@ -95,13 +89,17 @@ export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Reco
   const leagueRows = new Map<number, Row>(); for (const r of t.leagues ?? []) leagueRows.set(r.leagueid as number, r)
     const contracts = new Map<number, Row>(); for (const r of t.career_playercontract ?? []) contracts.set(r.playerid as number, r)
 
-  // Current in-game date isn't stored directly: use the latest dated event/contract change.
-  let latest = 0
-  const dateValue = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 19000101 && v <= 21991231 ? v : 0
-  for (const r of t.persistent_events ?? []) latest = Math.max(latest, dateValue(r.eventdate))
-  for (const r of t.career_playercontract ?? []) latest = Math.max(latest, dateValue(r.last_status_change_date), dateValue(r.contract_date))
-  const asOf = latest > 19000000 ? yyyymmdd(latest) : new Date()
-  const loans = new Map<number, Row>(); for (const r of t.playerloans ?? []) if (lilianToDate(r.loandateend as number) >= asOf) loans.set(r.playerid as number, r)
+  // The save has no usable "today". Use the latest date the game itself wrote for a past event
+  // (transfer/news events); contract dates are only trusted if they are within a month of that,
+  // since pre-contract agreements can carry future start dates.
+  const dv = (x: unknown) => (typeof x === 'number' && x > 19000000 && x < 21000000) ? x : 0
+  let ev = 0; for (const r of t.persistent_events ?? []) ev = Math.max(ev, dv(r.eventdate))
+  let latest = ev
+  const cap = ev ? ev + 100 : 21000000 // ~1 month in yyyymmdd arithmetic
+  for (const r of t.career_playercontract ?? []) for (const k of ['last_status_change_date', 'contract_date']) { const x = dv(r[k]); if (x <= cap) latest = Math.max(latest, x) }
+  const asOf = latest ? yyyymmdd(latest) : new Date()
+  const loans = new Map<number, Row>()
+  for (const r of t.playerloans ?? []) if (Number(r.teamidloanedfrom) > 0 && link.has(Number(r.playerid)) && Number(link.get(Number(r.playerid))!.teamid) !== Number(r.teamidloanedfrom) && lilianToDate(r.loandateend as number) >= asOf) loans.set(Number(r.playerid), r)
 
   const teams: Team[] = []
   const teamById = new Map<number, Team>()
@@ -178,8 +176,6 @@ export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Reco
   for (const tm of teams) {
     tm.players.sort((a, b) => POS_ORDER.indexOf(a.pos) - POS_ORDER.indexOf(b.pos) || b.ovr - a.ovr)
     tm.squadSize = tm.players.length
-    tm.avgAge = tm.players.length ? +(tm.players.reduce((s, p) => s + p.age, 0) / tm.players.length).toFixed(1) : 0
-    tm.squadValue = tm.players.reduce((s, p) => s + p.value, 0)
   }
   const leagues: League[] = []
   for (const r of t.leagues ?? []) {
@@ -205,8 +201,8 @@ export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Reco
   for (const tm of teams) {
     tm.players = tm.players.filter(p => !youthIds.has(p.id))
     tm.squadSize = tm.players.length
-    tm.squadValue = tm.players.reduce((n, p) => n + p.value, 0)
-    tm.avgAge = tm.players.length ? +(tm.players.reduce((n, p) => n + p.age, 0) / tm.players.length).toFixed(1) : 0
+    tm.avgAge = tm.players.length ? +(tm.players.reduce((s, p) => s + p.age, 0) / tm.players.length).toFixed(1) : 0
+    tm.squadValue = tm.players.reduce((s, p) => s + p.value, 0)
   }
   for (const y of youth) if (y.player) { y.player.team = `${club?.name ?? 'My club'} · Youth`; y.player.teamId = club?.id ?? -1 }
   return { players, teams, leagues, career, playerById, teamById, youth, scouts: t.career_scouts ?? [] }

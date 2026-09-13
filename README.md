@@ -1,113 +1,57 @@
-# FC26 Manager Companion — v3.1
+# FC26 Manager Companion — v4
 
-A browser-based reader for FC 26 career saves. Save parsing, games, snapshots and shortlists stay in your browser. The app does not modify FC save files.
+A browser-based reader for FC 26 career saves. The app preserves original save files and never edits them.
 
-## Run locally
+## Run
 
-Use Node.js 20.19+ or a current LTS version. From the `app` folder:
+From the app folder, run `npm ci` and `npm run dev`. For deployment, use `npm run build` with output directory `dist`. A prebuilt dist is included; serve it over HTTP, for example `python -m http.server 8080 --directory dist`. Keep the same browser and site address when upgrading to retain browser data.
 
-```sh
-npm ci
-npm run dev
-```
+## Saves in import order
 
-Open the local address printed in the terminal. For a production build, run `npm run build`; the output is `dist`. This archive also includes a prebuilt `dist` directory. Serve it over HTTP (for example `python -m http.server 8080 --directory dist`); do not open `index.html` directly with a file URL.
+Create a game in **Games & saves**, then open your CmMgr files in the order you want to compare them. Each import is a separate Save 1, Save 2, Save 3 observation, even if the filename is reused. Loading a stored save does not create a duplicate. Renaming a snapshot does not change its order.
 
-To update an existing Vercel deployment, replace the source and deploy with build command `npm run build`, output directory `dist`. Keep the same site address/browser to retain existing browser data.
+All comparisons and timelines use this sequence. There are no inferred in-game dates or elapsed-time claims. Career season numbers are read from each save; the first imported save is not necessarily career season 1.
 
-## Games: multiple saves in each career
+Existing snapshots migrate using their original capture order. Old estimated dates, ages and market values are cleared; player observations, raw files and shortlists remain. Older snapshots that never retained raw files cannot be reopened, and may lack birth dates, contracts or history fields until their original file is available.
 
-1. Open **Games & saves** and create a named game, such as `Leverkusen career`.
-2. Select that game before opening any FC career save. FC files are usually in `%LOCALAPPDATA%\EA SPORTS FC 26\settings`, named `CmMgrC…` or `CmMgrP…`.
-3. Every newly opened FC file creates a snapshot and stores a byte-for-byte copy of the original file in that game. It is safe to open multiple saves with identical filenames or inferred dates; their IDs are distinct.
-4. **Load save** reopens a stored file without creating another snapshot.
-5. **Export entire game** downloads a `.fc26game.json` file containing all snapshots, original save files and the shortlist.
-6. **Import game** restores an exported game as a separate copy. It never merges over another game, even if its name matches.
+**Export entire game** backs up snapshots, original files, shortlist and labelled manual history corrections in one `.fc26game.json` file. **Import game** restores a separate copy. Browser storage is local to the site: export before clearing it or moving browsers.
 
-Data is saved automatically. Game names can be changed with **Save game name**. The most recently selected game is remembered. Exports are portable backups; clearing browser site data removes local games. Large careers need enough browser storage and memory for their original files and exports.
+## Recorded player information
 
-Existing v2 snapshots migrate into `My first game / existing snapshots`. They retain their comparison history but have no original FC file to reopen, since v2 never stored the bytes. Reopen the original save to add a full saved-file record. The landing page can browse old snapshots even without an open FC file. Existing snapshots cannot reliably be split into careers automatically.
+The mapped player data contains birth dates and contract end years. It does not provide a verified current-age or market-value field. Without an established current date, the app displays birth dates and contract end years, and omits current ages, estimated market values, ageing alerts and automatic “expires this year” warnings.
 
-## Player timeline
+Player timelines chart OVR, POT or contract end year across saves, with club changes in the observation table. Missing observations break the chart line. Individual attributes are read from the save. Wages appear where recorded.
 
-Click a player in a roster, search, youth list, shortlist or comparison table. The timeline covers every snapshot in the selected game:
+## Manager history
 
-- Switch between OVR, POT and estimated-value line charts.
-- Hover or focus points for snapshot/date, club and all three values.
-- Read exact values and club membership in the table below the chart.
-- Missing players show as absent; missing observations break the line instead of inventing values.
+A zero league position is not a finishing place. Earlier-season zeroes display **Not recorded**; current-season zeroes display **In progress**. A recorded result from another snapshot can fill the gap only when season, club and league match and that snapshot records the season as completed. Conflicting results remain unresolved.
 
-Snapshots are sorted by inferred in-game date, then capture time. The horizontal axis represents successive snapshots, not equal elapsed days. Club is categorical, so it is shown at each observation instead of plotted on a numeric axis. Player matching uses FC player IDs within the selected game.
+A club's previous-season position is not used to fill a different season after a club change. Use **Set known finish** if you know the actual result. Manual entries are labelled **User-entered**, persist in game exports, and can be removed with **Use recorded result**. Original FC bytes stay unchanged.
 
-## My club → Youth
+## Search and squad depth
 
-Displays `career_youthplayers`, including players without senior-club roster links. Available attributes include name, positions, age, OVR, POT, potential variance, low-potential swing, months in the academy and tier. Youth records without a matching player row remain visible with unknown attributes. Youth players are excluded from senior squad planning and free-agent search.
+Primary-position matching is the default: a primary CAM does not block an RM merely because RM is a secondary preference. Secondary matching is optional. All strictly higher-rated peers are listed; equal OVR is not counted as ahead.
 
-The scout table shows the recorded scout name, experience, knowledge, region ID and state code. **The bundled schema does not establish the displayed potential min/max formula or link individual youths to scouts.** The app shows the recorded potential/variance/swing separately, rather than presenting an invented range or scout assignment. This is the remaining limitation of the requested Youth view.
+Starting-slot counts use a complete recorded XI (11 players, one goalkeeper), or your explicit slot-count selection. There are no fallback formation guesses. When the XI is incomplete, choose the count before using outside-starting-slots or buried filters. With two CM slots, two CMs can start and the third is behind both. Recorded starters elsewhere are excluded from blockers when a complete XI is available. These indicators describe rating and recorded lineup data, not guaranteed playing time.
 
-## My club → Squad planning & depth
+Search supports position, club, nation, league, OVR/POT, growth, contract end year, preferred foot, skill moves, weak foot, injury, loan records and squad role. Star players to keep a per-game shortlist and compare their ratings and club changes.
 
-Choose 4-3-3, 4-2-3-1, 4-4-2, 3-5-2, 3-4-3 or 4-1-2-1-2.
+The squad planner offers six formations, assigning each player at most once and ranking options by OVR. It flags vacancies, missing cover and cover shared between positions. Suggested formations use eligible primary and secondary positions. Contract alerts require you to choose an end year; no current year is assumed.
 
-The suggested XI uses registered primary/secondary positions. It first maximizes filled positions and then total OVR, assigning each player at most once. An optional filter excludes injured players. The view includes:
+## Youth academy
 
-- A formation pitch with clickable suggested starters.
-- Each position's complete options, ranked by OVR.
-- Vacancies, missing cover outside the XI and cover shared between positions.
-- Starters aged 30+ with no other eligible senior-squad player under 24.
-- Contracts ending by the inferred current calendar year, including already-expired contracts.
+My club → Youth includes career_youthplayers even without senior roster links. It shows available player attributes, recorded potential, variance, low-potential swing, academy months and tier, plus recorded scout information. The bundled mapping does not establish exact potential-range formulas or individual youth-to-scout links; these are not invented. Youth records missing a player row remain visible with unavailable attributes.
 
-Successor alerts use age and position eligibility, not an assumed development path. Academy players do not count as senior cover. This is an OVR-based planning suggestion, not a simulation of tactical suitability or the manager's actual selection.
+## Verification
 
-## Transfer shortlist and advanced search
+Run `python tests/make-fixtures.py`, `npm test`, and `npm run build`. For browser workflows, install Playwright Chromium with `npx playwright install chromium --only-shell`, then run `npm run test:browser`. An optional REAL_SAVE environment variable loads an external save for a final browser check. Personal saves and test screenshots are not included in this archive.
 
-Star a player from search or their profile. The shortlist belongs to the current game and survives subsequent saves, reloads and game export/import. It compares the first and latest recorded OVR, POT and club and keeps targets visible if they are absent from the currently open save. Each target has a full timeline.
-
-Search retains name/club/nation, gender, league, position, OVR, POT and age controls. New filters include:
-
-- Outside starting slots; buried behind 2+ players; within starting slots; saved substitutes/reserves; saved starting XI.
-- Primary position only (default), with an explicit option to include secondary positions.
-- Automatic starting-slot counts, a manual 1–4 slot override, and a minimum number of higher-rated players ahead.
-- Maximum estimated value in €M, contract ending by year, and minimum POT-minus-OVR growth.
-- Preferred foot, minimum skill/weak-foot stars, fit-only and exclude loans.
-
-**Example:** select `CM`, choose `Buried behind 2+ players`, and sort OVR descending. If a club has two CM slots, its top two CMs fit; the third CM shows both higher-rated players ahead. Select `RM` with primary-only matching and a primary CAM with secondary RM will not enter the comparison.
-
-Ranking uses primary positions by default, even when no position is selected. All higher-rated peers are listed with clickable profiles, primary position and recorded lineup position. Equal OVR never counts as ahead. Players recorded as starters elsewhere are excluded from that position's blockers when the saved XI is complete.
-
-Starting-slot counts come from the saved lineup only when it has exactly 11 players and one goalkeeper. Otherwise the UI explicitly labels estimates: two CB/CM/CDM slots, one at other positions. Use the manual override if these estimates do not match the club's shape. Complete saved XIs can also establish that a position has zero slots. Recorded starters are not labelled buried, even if a higher-rated player exists. These are squad-opportunity indicators, not predictions of actual playing time. Free agents have no club hierarchy.
-
-## Accuracy and verification
-
-Names use the bundled FC name pool and edited/generated names from the save. Unresolved names retain their player IDs. Market values are estimates, wages are shown only where present, and dates are inferred from the latest dated event/contract update. This inferred date may lag the actual in-game day.
-
-The package includes tests using two synthetic binary saves; no personal save data is included. The updated app passed TypeScript, a production build, core data tests and Chromium workflow tests. A real user career save was not attached, so real-save regression validation remains outstanding.
-
-To run the tests:
-
-```sh
-python tests/make-fixtures.py
-npm test
-npx playwright install chromium --only-shell
-npm run test:browser
-```
-
-Browser tests start a local Vite server on port 5173 and write QA screenshots into `tests`. They exercise youth, formation uniqueness, backup search, starring, timeline changes, export/import, reopening without duplicates and career isolation. Core tests also cover v1 IndexedDB migration, byte-exact file roundtrips, invalid import rejection, deletion and parser bounds.
-
-## Source map
-
-- `src/parser.ts`: embedded T3DB/FBCHUNKS decoder and bounds checks.
-- `src/model.ts`: club/player model, date inference, youth/scout extraction.
-- `src/snapshots.ts`: versioned IndexedDB, game storage, snapshots, original files, export/import and shortlist persistence.
-- `src/planning.ts`: position ranking and unique maximum-weight formation assignment.
-- `src/Features.tsx`: games, timelines, academy, planner and shortlist UI.
-- `src/App.tsx`: navigation, existing views and advanced player search.
-- `src/Snapshots.tsx`: per-game comparison and clickable historical players.
+Tests cover binary parsing, migration, sequential saves, raw-file export/import, game isolation, primary-position blockers, explicit slot counts, unique formations, missing history, manual finishes and table alignment.
 
 Unofficial fan project, not affiliated with EA.
 
-## v3.1 fixes
+## Market values (v6)
 
-All data tables now keep their headers and rows in one shared column layout. A surrounding container provides horizontal scrolling instead of separating the header and body into independent tables. Manager-history rows also use unique keys across club changes within a season.
+The save doesn't store market values (the game computes them live), so the app estimates them with a model fitted on FC 26's own launch values: a rating curve × age curve × position group, plus terms for potential gap and youth (high-potential teenagers are valued much more aggressively, as in the game). Typical error is under 5%; top players land within ~10%. Values are rounded to game-like steps (€1M above €50M). Women's players currently use the same curve.
 
-Regression tests cover two starting CMs, a third CM behind both, primary CAM versus primary RM, explicit secondary matching, complete saved lineups, manual slot overrides, and header/body alignment at desktop and narrow widths.
+The in-game date is inferred from the latest past event the game wrote into the save; contract dates are only used when they are within a month of that, so pre-contract agreements can't push the date forward.

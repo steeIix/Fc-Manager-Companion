@@ -8,7 +8,7 @@ export const FORMATIONS: Record<string, string[][]> = {
   '4-1-2-1-2': [['ST','ST'], ['CAM'], ['CM','CM'], ['CDM'], ['LB','CB','CB','RB'], ['GK']],
 }
 export function rankedOptions(players: Player[], pos: string) {
-  return players.filter(p => p.positions.includes(pos)).sort((a, b) => b.ovr - a.ovr || b.pot - a.pot || a.age - b.age || a.id - b.id)
+  return players.filter(p => p.positions.includes(pos)).sort((a, b) => b.ovr - a.ovr || b.pot - a.pot || a.id - b.id)
 }
 // Maximum-weight matching assigns a player only once, maximizes filled slots first,
 // then total OVR. Hungarian assignment includes dummy columns for empty positions.
@@ -63,12 +63,12 @@ export function opportunity(index: Map<string, Player[]>, lineups: Map<number, C
   const known = !!lineup?.valid
   // A recorded starter already deployed elsewhere is not blocking this position.
   const ahead = options.filter(p => p.id !== player.id && p.ovr > player.ovr && !(known && lineup!.starters.has(p.id) && savedPosition(p) !== pos))
-  const slots = override || (known ? lineup!.slots.get(pos) ?? 0 : ['CB','CM','CDM'].includes(pos) ? 2 : 1)
-  const source = override ? 'Manual slot count' : known ? 'Saved XI' : 'Estimated slots'
+  const slots = override || (known ? lineup!.slots.get(pos) ?? 0 : null)
+  const source = override ? 'Manual slot count' : known ? 'Saved XI' : 'Slot count not recorded'
   const starter = known && lineup!.starters.has(player.id)
   const rank = options.some(p => p.id === player.id) ? ahead.length + 1 : null
-  const blocked = rank !== null && slots > 0 && ahead.length >= slots && !starter
-  const status = rank === null ? 'No club hierarchy' : starter ? `Saved starter · ${savedPosition(player)}` : slots === 0 ? `No ${pos} slot in saved XI` : blocked ? 'Outside starting slots' : 'Within starting slots'
+  const blocked = rank !== null && slots !== null && slots > 0 && ahead.length >= slots && !starter
+  const status = rank === null ? 'No club hierarchy' : slots === null ? 'Choose starting-slot count' : starter ? `Saved starter · ${savedPosition(player)}` : slots === 0 ? `No ${pos} slot in saved XI` : blocked ? 'Outside starting slots' : 'Within starting slots'
   return { ahead, slots, source, rank, blocked, starter, status }
 }
 

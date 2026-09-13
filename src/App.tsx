@@ -2,7 +2,7 @@ import { Table } from './Table'
 import { Fragment, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { parseSave, isCareerSave, type Meta } from './parser'
 import { Snapshots } from './Snapshots'
-import { fromWorld, saveWithFile, listGames, toggleTarget, type Game } from './snapshots'
+import { fromWorld, saveWithFile, getSnapshot, getSavedFile, saveSnapshot, allSnapshots, setHistoryPosition, recoverFinish, historyKey, type HistoryFinish, listGames, toggleTarget, type Game } from './snapshots'
 import { Games, Timeline, Youth, Planner, Shortlist } from './Features'
 import { depthIndex, opportunity, lineupIndex, inSavedXI } from './planning'
 import { buildWorld, fmtMoney, fmtDate, posGroup, POS_ORDER, ATTR_GROUPS, ATTR_LABEL, type World, type Player, type Team, type League, type Names, type ValueModel } from './model'
@@ -30,6 +30,12 @@ export default function App() {
   const [snapTick, setSnapTick] = useState(0)
   const assets = useRef<{ meta: Meta; names: Names; nations: Record<string, string>; vm: ValueModel } | null>(null)
 
+  async function ensureAssets() {
+      if (!assets.current) {
+        const [meta, names, nations, vm] = await Promise.all(['meta', 'names', 'nations', 'valuemodel'].map(n => fetch(`/data/${n}.json`).then(r => r.json())))
+        assets.current = { meta, names, nations, vm }
+      }
+  }
   function selectGame(g: Game) { if (g.id !== game?.id) { setWorld(null); setSel(null); setSnapId(undefined) }; setGame(g) }
   async function toggle(id: number) { if (!game) return; try { const g = await toggleTarget(game.id, id); setGame({ ...g }); } catch (e) { setErr(String(e)) } }
   async function load(file: File, existingId?: string, selectedGame?: Game) {
@@ -39,19 +45,16 @@ export default function App() {
     try {
       const active = selectedGame ?? game
       if (!active) throw new Error('Select or create a game before opening a save.')
-      if (!assets.current) {
-        setBusy('Loading name database…')
-        const [meta, names, nations, vm] = await Promise.all(['meta', 'names', 'nations', 'valuemodel'].map(n => fetch(`/data/${n}.json`).then(r => r.json())))
-        assets.current = { meta, names, nations, vm }
-      }
+      await ensureAssets()
       const buf = await file.arrayBuffer()
       if (!isCareerSave(buf)) throw new Error('This file is not an FC 26 career save. Pick a file that starts with "CmMgr" from your settings folder.')
       setBusy('Decoding databases…')
       await new Promise(r => setTimeout(r, 20))
-      const tables = parseSave(buf, assets.current.meta)
+      const tables = parseSave(buf, assets.current!.meta)
       if (!tables.players?.length) throw new Error('No player table was found in this save.')
-      const w = buildWorld(tables, assets.current.names, assets.current.nations, assets.current.vm)
-      if (existingId) setSnapId(existingId)
+      const existing = existingId ? await getSnapshot(existingId) : undefined
+      const w = buildWorld(tables, assets.current!.names, assets.current!.nations, assets.current!.vm)
+      if (existingId) { setSnapId(existingId); if (existing) await saveSnapshot({ ...fromWorld(w, file.name, active.id), id: existing.id, order: existing.order, label: existing.label, savedAt: existing.savedAt }) }
       else { const s = fromWorld(w, file.name, active.id); await saveWithFile(s, buf); setSnapId(s.id); setSnapTick(x => x + 1) }
       setGame(active); setSel(null); setWorld(w); setFileName(file.name); setView(w.career.club ? { kind: 'my' } : { kind: 'leagues' })
     } catch (e: any) { setErr(e.message || String(e)) }
@@ -75,18 +78,18 @@ export default function App() {
           <button className={view.kind === 'players' ? 'on' : ''} onClick={() => setView({ kind: 'players' })}>Player search</button>
           <button className={view.kind === 'snapshots' ? 'on' : ''} onClick={() => setView({ kind: 'snapshots' })}>Snapshots &amp; compare</button>
         </nav>
-        <div className="foot">{world.players.length.toLocaleString()} players · {world.teams.length} clubs · {world.leagues.length} leagues<br />Values are estimates from the game's rating curve; wages are shown only where the save holds a contract.<button onClick={() => { setWorld(null); setView({ kind: 'leagues' }) }}>Open another save</button></div>
+        <div className="foot">{world.players.length.toLocaleString()} players · {world.teams.length} clubs · {world.leagues.length} leagues<br />Values are estimates from the game's rating curve; wages are shown only where the save holds a contract. In-game date is inferred from the latest event in the save.<button onClick={() => { setWorld(null); setView({ kind: 'leagues' }) }}>Open another save</button></div>
       </aside>
       <main className="main">
         {err && <p className="err" role="alert">{err}</p>}{busy && <p role="status">{busy}</p>}
         {view.kind === 'games' && gamePanel}
         {view.kind === 'shortlist' && game && <Shortlist game={game} world={world} pick={setSel} toggle={toggle} refresh={snapTick} />}
         {view.kind === 'leagues' && <Leagues world={world} open={id => setView({ kind: 'league', id })} />}
-        {view.kind === 'league' && <LeagueView league={world.leagues.find(l => l.id === view.id)!} back={() => setView({ kind: 'leagues' })} open={id => setView({ kind: 'club', id })} userClub={c.clubId} />}
+        {view.kind === 'league' && <LeagueView league={world.leagues.find(l => l.id === view.id)!} back={() => setView({ kind: 'leagues' })} open={id => setView({ kind: 'club', id })} userClub={c.clubId} pick={setSel} />}
         {view.kind === 'club' && <ClubView team={world.teamById.get(view.id)!} world={world} back={() => setView({ kind: 'league', id: world.teamById.get(view.id)!.leagueId })} pick={setSel} />}
         {view.kind === 'players' && <Search world={world} pick={setSel} openClub={id => setView({ kind: 'club', id })} />}
         {view.kind === 'snapshots' && <Snapshots key={game?.id} gameId={game?.id ?? 'legacy'} currentId={snapId} refresh={snapTick} />}
-        {view.kind === 'my' && c.club && <MyClub world={world} open={() => setView({ kind: 'club', id: c.club!.id })} pick={setSel} />}
+        {view.kind === 'my' && c.club && <MyClub game={game} onGameChange={setGame} world={world} open={() => setView({ kind: 'club', id: c.club!.id })} pick={setSel} />}
       </main>
       {sel && <PlayerModal gameId={game?.id ?? 'legacy'} refresh={snapTick} p={sel} world={world} close={() => setSel(null)} openClub={id => { setSel(null); setView({ kind: 'club', id }) }} />}
     </div></TargetContext.Provider>
@@ -98,7 +101,7 @@ function DropScreen({ onFile, busy, err }: { onFile: (f: File) => void; busy: st
   return (
     <div className="main"><div className="drop">
       <h1>FC26 Manager Companion</h1>
-      <p className="sub">Open a career save and browse every league, club roster and player in your world — ratings, potential, positions, values and contracts — without launching the game.</p>
+      <p className="sub">Open a career save and browse every league, club roster and player in your world — ratings, potential, positions and contracts — without launching the game.</p>
       <div className={'zone' + (over ? ' over' : '')} onDragOver={e => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
         onDrop={e => { e.preventDefault(); setOver(false); if (busy) return; const f = e.dataTransfer.files[0]; if (f) onFile(f) }}>
         <strong>Drop your career save here</strong>
@@ -132,7 +135,32 @@ function useSort<T>(rows: T[], init: string, get: (r: T, k: string) => any, init
   return { sorted, Th }
 }
 
-function LeagueView({ league, back, open, userClub }: { league: League; back: () => void; open: (id: number) => void; userClub: number }) {
+function LeagueBest({ league, open, pick }: { league: League; open: (id: number) => void; pick: (p: Player) => void }) {
+  const [pos, setPos] = useState(''); const [by, setBy] = useState<'ovr' | 'pot' | 'value' | 'growth'>('ovr'); const [n, setN] = useState(25); const [maxAge, setMaxAge] = useState(99)
+  const rows = useMemo(() => {
+    const all = league.teams.flatMap(t => t.players).filter(p => (!pos || p.positions.includes(pos)) && p.age <= maxAge)
+    all.sort((a, b) => by === 'ovr' ? b.ovr - a.ovr || b.pot - a.pot : by === 'pot' ? b.pot - a.pot || b.ovr - a.ovr : by === 'value' ? b.value - a.value : (b.pot - b.ovr) - (a.pot - a.ovr) || b.pot - a.pot)
+    return all.slice(0, n)
+  }, [league, pos, by, n, maxAge])
+  return <>
+    <h2>Best players in {league.name}</h2>
+    <div className="bar">
+      <select aria-label="Position" value={pos} onChange={e => setPos(e.target.value)}><option value="">Any position</option>{POS_ORDER.map(p => <option key={p}>{p}</option>)}</select>
+      <div className="seg">{(['ovr', 'pot', 'value', 'growth'] as const).map(k => <button key={k} className={by === k ? 'on' : ''} onClick={() => setBy(k)}>{{ ovr: 'Overall', pot: 'Potential', value: 'Value', growth: 'Room to grow' }[k]}</button>)}</div>
+      <span className="range">Max age <input type="number" value={maxAge} onChange={e => setMaxAge(+e.target.value || 99)} /></span>
+      <div className="seg">{[10, 25, 50, 100].map(k => <button key={k} className={n === k ? 'on' : ''} onClick={() => setN(k)}>Top {k}</button>)}</div>
+    </div>
+    <Table className="tbl"><thead><tr><th className="num">#</th><th>Player</th><th>Pos</th><th className="num">Age</th><th>Nation</th><th>Club</th><th className="num">OVR</th><th className="num">POT</th><th className="num">Value</th><th className="num">Contract</th></tr></thead><tbody>
+      {rows.map((p, i) => <tr key={p.id} className="click" onClick={() => pick(p)}>
+        <td className="num dim">{i + 1}</td><td className="name"><span className={p.known ? '' : 'unk'}>{p.name}</span></td><td><Pos p={p.pos} />{pos && p.pos !== pos && <span className="dim" style={{ marginLeft: 6, fontSize: 12 }}>also {pos}</span>}</td>
+        <td className="num">{p.age}</td><td>{p.nation}</td><td><a href="#" onClick={e => { e.preventDefault(); e.stopPropagation(); open(p.teamId) }}>{p.team}</a></td>
+        <td className="num"><Rating v={p.ovr} /></td><td className="num"><Rating v={p.pot} /></td><td className="num">{fmtMoney(p.value)}</td><td className="num">{p.contractUntil || '–'}</td>
+      </tr>)}
+    </tbody></Table>
+  </>
+}
+
+function LeagueView({ league, back, open, userClub, pick }: { league: League; back: () => void; open: (id: number) => void; userClub: number; pick: (p: Player) => void }) {
   const hasTable = league.teams.some(t => t.played > 0)
   const { sorted, Th } = useSort(league.teams, hasTable ? 'pos' : 'ovr', (t, k) => k === 'pos' ? -(t.tablePos || 99) : k === 'name' ? t.name : (t as any)[k], true)
   return <>
@@ -150,6 +178,7 @@ function LeagueView({ league, back, open, userClub }: { league: League; back: ()
         {hasTable && <><td className="num">{t.played}</td><td className="num"><b>{t.points}</b></td></>}
       </tr>)}
     </tbody></Table>
+    <LeagueBest league={league} open={open} pick={pick} />
   </>
 }
 
@@ -188,7 +217,7 @@ function Roster({ players, world, pick, wages }: { players: Player[]; world: Wor
         lastGrp = g
         return <Fragment key={p.id}>{head}<tr className="click" onClick={() => pick(p)}>
           <td className="num dim">{p.jersey || '–'}</td>
-          <td className="name"><span className={p.known ? '' : 'unk'}>{p.name}</span>{p.id === world.teamById.get(p.teamId)?.captainId && <span className="tag">C</span>}{p.injury > 0 && <span className="tag inj">Injured</span>}{p.onLoanFrom && <span className="tag loan" title={`From ${p.onLoanFrom} until ${p.loanEnd}`}>Loan</span>}</td>
+          <td className="name"><span className={p.known ? '' : 'unk'}>{p.name}</span>{p.id === world.teamById.get(p.teamId)?.captainId && <span className="tag">C</span>}{p.injury > 0 && <span className="tag inj">Injured</span>}{p.onLoanFrom && <span className="tag loan" title={`From ${p.onLoanFrom} until ${p.loanEnd}`}>Loan record</span>}</td>
           <td><Pos p={p.pos} /></td><td className="dim">{p.positions.slice(1).join(' ')}</td><td className="num">{p.age}</td><td>{p.nation}</td>
           <td className="num"><Rating v={p.ovr} /></td><td className="num"><Rating v={p.pot} /></td><td className="num">{fmtMoney(p.value)}</td>
           {wages && <td className="num">{p.wage != null ? fmtMoney(p.wage) : '–'}</td>}
@@ -207,12 +236,15 @@ function ClubView({ team, world, back, pick }: { team: Team; world: World; back:
   </>
 }
 
-function MyClub({ world, open, pick }: { world: World; open: () => void; pick: (p: Player) => void }) {
+function MyClub({ world, open, pick, game, onGameChange }: { game: Game | null; onGameChange: (g:Game)=>void; world: World; open: () => void; pick: (p: Player) => void }) {
   const [tab, setTab] = useState('overview')
+  const [recordedHistory,setRecordedHistory]=useState<HistoryFinish[]>([])
+  useEffect(()=>{let live=true;if(game)allSnapshots(game.id).then(snaps=>{if(live)setRecordedHistory(snaps.flatMap(s=>s.history??[]))});return()=>{live=false}},[game?.id,world])
+  async function changeFinish(key:string,position:number|null){if(!game)return;await setHistoryPosition(game.id,key,position);const updated=(await listGames()).find(g=>g.id===game.id);if(updated)onGameChange(updated)}
   const c = world.career, t = c.club!
   const contracted = t.players.filter(p => p.wage != null)
   const wageBill = contracted.reduce((s, p) => s + (p.wage ?? 0), 0)
-  const expiring = t.players.filter(p => p.contractUntil && p.contractUntil <= c.asOf.getUTCFullYear() + 1).sort((a, b) => b.ovr - a.ovr)
+  const contracts = t.players.filter(p=>p.contractUntil>0)
   const rising = t.players.filter(p => p.pot - p.ovr >= 5).sort((a, b) => b.pot - a.pot).slice(0, 8)
   return <>
     <ClubHeader t={t} world={world} />
@@ -221,19 +253,19 @@ function MyClub({ world, open, pick }: { world: World; open: () => void; pick: (
     <div className="split">
       <div className="kpi"><b>{fmtMoney(wageBill)}</b><span>Weekly wage bill across {contracted.length} contracts</span></div>
       <div className="kpi"><b>{c.manager}</b><span>Manager · season {c.season} · {fmtMoney(c.wage)}/wk</span></div>
-      <div className="kpi"><b>{expiring.length}</b><span>Contracts ending by {c.asOf.getUTCFullYear() + 1}</span></div>
+      <div className="kpi"><b>{contracts.length}</b><span>Recorded contract end years</span></div>
     </div>
     {c.history.length > 0 && <>
-      <h2>Manager history</h2>
+      <h2>Manager history</h2><p className="sub">This save contains the career’s history from earlier seasons. A zero finishing position means the save has no recorded placement; it is never displayed as 0th. Each history row is not a stored snapshot. The first snapshot you imported can be from a later season.</p>
       <Table className="tbl"><thead><tr><th className="num">Season</th><th>Club</th><th>League</th><th className="num">Pos</th><th className="num">P</th><th className="num">W</th><th className="num">D</th><th className="num">L</th><th className="num">GF</th><th className="num">GA</th><th className="num">Pts</th><th>Biggest signing</th><th>Biggest sale</th><th className="num">Job security</th></tr></thead><tbody>
-        {c.history.map((h, i) => <tr key={`${h.season}-${h.teamid}-${i}`}><td className="num">{h.season as number}</td><td className="name">{world.teamById.get(h.teamid as number)?.name ?? '–'}</td><td className="dim">{world.leagues.find(l => l.id === h.leagueid)?.name ?? '–'}</td><td className="num">{h.tableposition as number}</td><td className="num">{h.games_played as number}</td><td className="num">{h.wins as number}</td><td className="num">{h.draws as number}</td><td className="num">{h.losses as number}</td><td className="num">{h.goals_for as number}</td><td className="num">{h.goals_against as number}</td><td className="num"><b>{h.points as number}</b></td>
+        {c.history.map((h, i) => <tr key={`${h.season}-${h.teamid}-${i}`}><td className="num">{h.season as number}</td><td className="name">{world.teamById.get(h.teamid as number)?.name ?? '–'}</td><td className="dim">{world.leagues.find(l => l.id === h.leagueid)?.name ?? '–'}</td><td className="num"><HistoryPosition season={Number(h.season)} team={Number(h.teamid)} league={Number(h.leagueid)} recorded={Number(h.tableposition)} currentSeason={c.season} history={recordedHistory} game={game} onSave={changeFinish} /></td><td className="num">{h.games_played as number}</td><td className="num">{h.wins as number}</td><td className="num">{h.draws as number}</td><td className="num">{h.losses as number}</td><td className="num">{h.goals_for as number}</td><td className="num">{h.goals_against as number}</td><td className="num"><b>{h.points as number}</b></td>
           <td>{h.bigbuyplayername ? `${h.bigbuyplayername} (${fmtMoney(h.bigbuyamount as number)})` : '–'}</td><td>{h.bigsellplayername ? `${h.bigsellplayername} (${fmtMoney(h.bigsellamount as number)})` : '–'}</td><td className="num">{h.jobsecurityscore as number}</td></tr>)}
       </tbody></Table>
     </>}
     {rising.length > 0 && <>
       <h2>Room to grow</h2>
-      <Table className="tbl"><thead><tr><th>Player</th><th>Pos</th><th className="num">Age</th><th className="num">OVR</th><th className="num">POT</th><th className="num">Value</th></tr></thead><tbody>
-        {rising.map(p => <tr key={p.id} className="click" onClick={() => pick(p)}><td className="name">{p.name}</td><td><Pos p={p.pos} /></td><td className="num">{p.age}</td><td className="num"><Rating v={p.ovr} /></td><td className="num"><Rating v={p.pot} /></td><td className="num">{fmtMoney(p.value)}</td></tr>)}
+      <Table className="tbl"><thead><tr><th>Player</th><th>Pos</th><th>Born</th><th className="num">OVR</th><th className="num">POT</th></tr></thead><tbody>
+        {rising.map(p => <tr key={p.id} className="click" onClick={() => pick(p)}><td className="name">{p.name}</td><td><Pos p={p.pos} /></td><td>{p.birth}</td><td className="num"><Rating v={p.ovr} /></td><td className="num"><Rating v={p.pot} /></td></tr>)}
       </tbody></Table>
     </>}
     <h2>Squad</h2>
@@ -246,7 +278,7 @@ function MyClub({ world, open, pick }: { world: World; open: () => void; pick: (
 const R = ({ v, set }: { v: number[]; set: (v: number[]) => void }) => <><input type="number" value={v[0]} onChange={e => set([+e.target.value, v[1]])} /><span>–</span><input type="number" value={v[1]} onChange={e => set([v[0], +e.target.value])} /></>
 
 function Search({ world, pick, openClub }: { world: World; pick: (p: Player) => void; openClub: (id: number) => void }) {
-  const [role, setRole] = useState('all'), [maxValue, setMaxValue] = useState(''), [contract, setContract] = useState(''), [foot, setFoot] = useState(''), [minGrowth, setMinGrowth] = useState(''), [minSkill, setMinSkill] = useState(''), [minWeak, setMinWeak] = useState(''), [fit, setFit] = useState(false), [notLoan, setNotLoan] = useState(false)
+  const [role, setRole] = useState('all'), [contract, setContract] = useState(''), [foot, setFoot] = useState(''), [minGrowth, setMinGrowth] = useState(''), [minSkill, setMinSkill] = useState(''), [minWeak, setMinWeak] = useState(''), [fit, setFit] = useState(false), [notLoan, setNotLoan] = useState(false)
   const [includeSecondary, setIncludeSecondary] = useState(false), [slotOverride, setSlotOverride] = useState(0), [minAhead, setMinAhead] = useState(0)
   const depth = useMemo(() => depthIndex(world, includeSecondary), [world, includeSecondary])
   const lineups = useMemo(() => lineupIndex(world), [world])
@@ -257,15 +289,15 @@ function Search({ world, pick, openClub }: { world: World; pick: (p: Player) => 
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase()
     return world.players.filter(p => !youthIds.has(p.id) &&
-      (!maxValue || p.value <= Number(maxValue) * 1e6) && (!contract || (p.contractUntil > 0 && p.contractUntil <= Number(contract))) && (!foot || p.foot === foot) && (!minGrowth || p.pot - p.ovr >= Number(minGrowth)) && (!minSkill || p.skill >= Number(minSkill)) && (!minWeak || p.weak >= Number(minWeak)) && (!fit || !p.injury) && (!notLoan || !p.onLoanFrom) &&
-      opportunities.get(p.id)!.ahead.length >= minAhead && (role === 'all' || (role === 'backup' && opportunities.get(p.id)!.blocked) || (role === 'best' && opportunities.get(p.id)!.rank !== null && opportunities.get(p.id)!.slots > 0 && !opportunities.get(p.id)!.blocked) || (role === 'buried' && opportunities.get(p.id)!.blocked && opportunities.get(p.id)!.ahead.length >= 2) || (role === 'bench' && p.teamId >= 0 && ['SUB','RES'].includes(p.squadPos)) || (role === 'xi' && p.teamId >= 0 && inSavedXI(p))) && (g === 'all' || p.gender === g) && (!pos || (includeSecondary ? p.positions.includes(pos) : p.pos === pos)) && p.ovr >= ovr[0] && p.ovr <= ovr[1] && p.pot >= pot[0] && p.pot <= pot[1] && p.age >= age[0] && p.age <= age[1] && (lg === -2 || p.leagueId === lg) && (!s || p.name.toLowerCase().includes(s) || p.team.toLowerCase().includes(s) || p.nation.toLowerCase().includes(s)))
-  }, [world, q, g, pos, ovr, pot, age, lg, role, maxValue, contract, foot, minGrowth, minSkill, minWeak, fit, notLoan, depth, youthIds, opportunities, minAhead, includeSecondary])
+      (!contract || (p.contractUntil > 0 && p.contractUntil <= Number(contract))) && (!foot || p.foot === foot) && (!minGrowth || p.pot - p.ovr >= Number(minGrowth)) && (!minSkill || p.skill >= Number(minSkill)) && (!minWeak || p.weak >= Number(minWeak)) && (!fit || !p.injury) && (!notLoan || !p.onLoanFrom) &&
+      opportunities.get(p.id)!.ahead.length >= minAhead && (role === 'all' || (role === 'backup' && opportunities.get(p.id)!.blocked) || (role === 'best' && opportunities.get(p.id)!.rank !== null && (opportunities.get(p.id)!.slots ?? 0) > 0 && !opportunities.get(p.id)!.blocked) || (role === 'buried' && opportunities.get(p.id)!.blocked && opportunities.get(p.id)!.ahead.length >= 2) || (role === 'bench' && p.teamId >= 0 && ['SUB','RES'].includes(p.squadPos)) || (role === 'xi' && p.teamId >= 0 && inSavedXI(p))) && (g === 'all' || p.gender === g) && (!pos || (includeSecondary ? p.positions.includes(pos) : p.pos === pos)) && p.ovr >= ovr[0] && p.ovr <= ovr[1] && p.pot >= pot[0] && p.pot <= pot[1] && p.age >= age[0] && p.age <= age[1] && (lg === -2 || p.leagueId === lg) && (!s || p.name.toLowerCase().includes(s) || p.team.toLowerCase().includes(s) || p.nation.toLowerCase().includes(s)))
+  }, [world, q, g, pos, ovr, pot, age, lg, role, contract, foot, minGrowth, minSkill, minWeak, fit, notLoan, depth, youthIds, opportunities, minAhead, includeSecondary])
   const { sorted, Th } = useSort(rows, 'ovr', (p, k) => (p as any)[k])
   useEffect(() => setPage(0), [rows])
   const per = 100, pages = Math.ceil(sorted.length / per)
   return <>
     <h1>Player search</h1>
-    <p className="sub">Every player in the save. Search by name, club or nation; narrow by rating, potential, position and age.</p>
+    <p className="sub">Every player in the save. Search by name, club or nation; narrow by rating, potential, position and contract end year.</p>
     <div className="bar">
       <input type="text" placeholder="Name, club or nation" value={q} onChange={e => setQ(e.target.value)} />
       <div className="seg"><button className={g === 'all' ? 'on' : ''} onClick={() => setG('all')}>All</button><button className={g === 0 ? 'on' : ''} onClick={() => setG(0)}>Men</button><button className={g === 1 ? 'on' : ''} onClick={() => setG(1)}>Women</button></div>
@@ -279,23 +311,23 @@ function Search({ world, pick, openClub }: { world: World; pick: (p: Player) => 
     <div className="bar advanced-filters">
       <label>Club role<select value={role} onChange={e => setRole(e.target.value)}><option value="all">Any role</option><option value="backup">Outside starting slots</option><option value="buried">Buried behind 2+ players</option><option value="best">Within starting slots</option><option value="bench">Saved substitutes / reserves</option><option value="xi">Saved starting XI</option></select></label>
       <label>Position matching<select value={includeSecondary ? 'all' : 'primary'} onChange={e => setIncludeSecondary(e.target.value === 'all')}><option value="primary">Primary position only</option><option value="all">Include secondary positions</option></select></label>
-      <label>Starting slots<select value={slotOverride} onChange={e => setSlotOverride(Number(e.target.value))}><option value={0}>Auto: saved XI / estimate</option>{[1,2,3,4].map(n => <option key={n} value={n}>{n} starting slot{n > 1 ? 's' : ''}</option>)}</select></label>
+      <label>Starting slots<select aria-label="Starting slots" value={slotOverride} onChange={e => setSlotOverride(Number(e.target.value))}><option value={0}>Auto: recorded XI only</option>{[1,2,3,4].map(n => <option key={n} value={n}>{n} starting slot{n > 1 ? 's' : ''}</option>)}</select></label>
       <label>Minimum players ahead<select value={minAhead} onChange={e => setMinAhead(Number(e.target.value))}>{[0,1,2,3,4].map(n => <option key={n} value={n}>{n === 0 ? 'Any' : `${n}+ higher-rated players`}</option>)}</select></label>
-      <label>Max value (€M)<input type="number" min="0" value={maxValue} onChange={e => setMaxValue(e.target.value)} /></label>
+      
       <label>Contract ending by<input type="number" min="2000" placeholder="Year" value={contract} onChange={e => setContract(e.target.value)} /></label>
       <label>Min growth (POT − OVR)<input type="number" min="0" value={minGrowth} onChange={e => setMinGrowth(e.target.value)} /></label>
       <label>Foot<select value={foot} onChange={e => setFoot(e.target.value)}><option value="">Either</option><option>Right</option><option>Left</option></select></label>
       <label>Min skills<select value={minSkill} onChange={e => setMinSkill(e.target.value)}><option value="">Any</option>{[1,2,3,4,5].map(n => <option key={n} value={n}>{n}★</option>)}</select></label>
       <label>Min weak foot<select value={minWeak} onChange={e => setMinWeak(e.target.value)}><option value="">Any</option>{[1,2,3,4,5].map(n => <option key={n} value={n}>{n}★</option>)}</select></label>
-      <label><input type="checkbox" checked={fit} onChange={e => setFit(e.target.checked)} /> Fit players only</label><label><input type="checkbox" checked={notLoan} onChange={e => setNotLoan(e.target.checked)} /> Exclude loans</label>
-      <button className="btn" onClick={() => { setQ(''); setG('all'); setPos(''); setOvr([40,99]); setPot([40,99]); setAge([15,45]); setLg(-2); setRole('all'); setMaxValue(''); setContract(''); setFoot(''); setMinGrowth(''); setMinSkill(''); setMinWeak(''); setFit(false); setNotLoan(false); setIncludeSecondary(false); setSlotOverride(0); setMinAhead(0) }}>Reset filters</button>
-    </div><p className="note">Primary positions only by default. Two starting CM slots can accommodate the top two CMs. Slot counts use a complete saved XI; otherwise estimates are labelled (CB/CM/CDM: 2; others: 1). You can override the slot count. Recorded starters are never marked buried; players starting elsewhere do not block this position. Equal OVR does not count as ahead. Secondary-position comparisons are optional.</p>
+      <label><input type="checkbox" checked={fit} onChange={e => setFit(e.target.checked)} /> Fit players only</label><label><input type="checkbox" checked={notLoan} onChange={e => setNotLoan(e.target.checked)} /> Exclude loan records</label>
+      <button className="btn" onClick={() => { setQ(''); setG('all'); setPos(''); setOvr([40,99]); setPot([40,99]); setLg(-2); setRole('all'); setContract(''); setFoot(''); setMinGrowth(''); setMinSkill(''); setMinWeak(''); setFit(false); setNotLoan(false); setIncludeSecondary(false); setSlotOverride(0); setMinAhead(0) }}>Reset filters</button>
+    </div><p className="note">Primary positions only by default. Two starting CM slots can accommodate the top two CMs. Slot counts use a complete saved XI. If unavailable, choose a slot count yourself; none is guessed. Recorded starters are never marked buried; players starting elsewhere do not block this position. Equal OVR does not count as ahead. Secondary-position comparisons are optional.</p>
     {!sorted.length && <p className="sub">No players match these filters.</p>}
     <Table className="tbl"><thead><tr><th>Star</th><Th id="name" label="Player" /><th>Pos</th><Th id="age" label="Age" num /><th>Nation</th><Th id="team" label="Club" /><Th id="ovr" label="OVR" num /><Th id="pot" label="POT" num /><Th id="value" label="Value" num /><Th id="contractUntil" label="Contract" num /><th>Starting opportunity</th><th>Players ahead at this position</th></tr></thead><tbody>
       {sorted.slice(page * per, page * per + per).map(p => <tr key={p.id} className="click" onClick={() => pick(p)}>
-        <td><StarButton p={p} /></td><td className="name"><span className={p.known ? '' : 'unk'}>{p.name}</span>{p.onLoanFrom && <span className="tag loan">Loan</span>}</td><td><Pos p={p.pos} />{p.positions.length > 1 && <span className="dim" style={{ color: 'var(--ink-3)', marginLeft: 6, fontSize: 12 }}>{p.positions.slice(1).join(' ')}</span>}</td>
+        <td><StarButton p={p} /></td><td className="name"><span className={p.known ? '' : 'unk'}>{p.name}</span>{p.onLoanFrom && <span className="tag loan">Loan record</span>}</td><td><Pos p={p.pos} />{p.positions.length > 1 && <span className="dim" style={{ color: 'var(--ink-3)', marginLeft: 6, fontSize: 12 }}>{p.positions.slice(1).join(' ')}</span>}</td>
         <td className="num">{p.age}</td><td>{p.nation}</td><td>{p.teamId >= 0 ? <a href="#" onClick={e => { e.preventDefault(); e.stopPropagation(); openClub(p.teamId) }}>{p.team}</a> : <span className="dim">Free agent</span>}</td>
-        <td className="num"><Rating v={p.ovr} /></td><td className="num"><Rating v={p.pot} /></td><td className="num">{fmtMoney(p.value)}</td><td className="num">{p.contractUntil || '–'}</td><td className="hierarchy-cell">{(() => { const h = opportunities.get(p.id)!; return <><b>{h.status}</b><small>{h.rank !== null ? `#${h.rank} · ${pos || p.pos} · ${h.slots} starting slot${h.slots === 1 ? '' : 's'}` : 'Unassigned'}<br />{h.source}</small></> })()}</td><td className="competition-cell">{(() => { const h = opportunities.get(p.id)!; return h.ahead.length ? <>{h.ahead.map(a => <button key={a.id} className="text-btn" onClick={e => { e.stopPropagation(); pick(a) }}>{a.name} · {a.ovr}<small>{a.pos}{a.pos !== (pos || p.pos) ? ' · secondary option' : ' · primary'}{inSavedXI(a) ? ` · saved: ${a.squadPos}` : ''}</small></button>)}</> : h.rank !== null ? <span className="dim">No higher-rated peers</span> : '—' })()}</td>
+        <td className="num"><Rating v={p.ovr} /></td><td className="num"><Rating v={p.pot} /></td><td className="num">{fmtMoney(p.value)}</td><td className="num">{p.contractUntil || '–'}</td><td className="hierarchy-cell">{(() => { const h = opportunities.get(p.id)!; return <><b>{h.status}</b><small>{h.rank !== null ? `#${h.rank} · ${pos || p.pos} · ${h.slots ?? '?'} starting slot${h.slots === 1 ? '' : 's'}` : 'Unassigned'}<br />{h.source}</small></> })()}</td><td className="competition-cell">{(() => { const h = opportunities.get(p.id)!; return h.ahead.length ? <>{h.ahead.map(a => <button key={a.id} className="text-btn" onClick={e => { e.stopPropagation(); pick(a) }}>{a.name} · {a.ovr}<small>{a.pos}{a.pos !== (pos || p.pos) ? ' · secondary option' : ' · primary'}{inSavedXI(a) ? ` · saved: ${a.squadPos}` : ''}</small></button>)}</> : h.rank !== null ? <span className="dim">No higher-rated peers</span> : '—' })()}</td>
       </tr>)}
     </tbody></Table>
     {pages > 1 && <div className="pager"><button disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</button><span>Page {page + 1} of {pages}</span><button disabled={page >= pages - 1} onClick={() => setPage(page + 1)}>Next</button></div>}
@@ -313,7 +345,7 @@ function PlayerModal({ p, world, close, openClub, gameId, refresh }: { gameId: s
       <div className={'card' + (p.ovr >= 85 ? ' gold' : '')}><div className="o">{p.ovr}</div><div className="p">{p.pos}</div><div className="pot">Potential {p.pot}</div></div>
       <div>
         <h1 className={p.known ? '' : 'unk'}><StarButton p={p} />{p.name}</h1>
-        <div className="meta" style={{ color: 'var(--ink-2)' }}>{p.teamId >= 0 ? <a href="#" onClick={e => { e.preventDefault(); openClub(p.teamId) }}>{p.team}</a> : 'Free agent'} · {p.league} · {p.nation}{p.nationalTeam ? ` (${p.nationalTeam} squad)` : ''} · {p.gender ? 'Women' : 'Men'}{p.onLoanFrom && ` · on loan from ${p.onLoanFrom} until ${p.loanEnd}`}</div>
+        <div className="meta" style={{ color: 'var(--ink-2)' }}>{p.teamId >= 0 ? <a href="#" onClick={e => { e.preventDefault(); openClub(p.teamId) }}>{p.team}</a> : 'Free agent'} · {p.league} · {p.nation}{p.nationalTeam ? ` (${p.nationalTeam} squad)` : ''} · {p.gender ? 'Women' : 'Men'}{p.onLoanFrom && ` · loan record: ${p.onLoanFrom}, recorded end ${p.loanEnd}`}</div>
         <div className="facts">
           <div><span>Age</span><b>{p.age} · {p.birth}</b></div><div><span>Positions</span><b>{p.positions.join(', ')}</b></div><div><span>Squad role</span><b>{p.squadPos}{p.jersey ? ` · #${p.jersey}` : ''}</b></div>
           <div><span>Estimated value</span><b>{fmtMoney(p.value)}</b></div><div><span>Wage</span><b>{p.wage != null ? fmtMoney(p.wage) + ' / wk' : 'Not in save'}</b></div><div><span>Contract until</span><b>{p.contractUntil || '–'}</b></div>
@@ -321,9 +353,19 @@ function PlayerModal({ p, world, close, openClub, gameId, refresh }: { gameId: s
         </div>
       </div>
     </div>
-    <div className="face">{Object.entries(face).map(([k, v]) => <div key={k}><b>{v}</b><span>{k}</span></div>)}</div>
+
     <Timeline id={p.id} gameId={gameId} refresh={refresh} />
+    <p className="sub">Individual attributes below are read from the save. Composite pace/shooting estimates are not shown.</p>
     <div className="attrs">{groups.map(([name, keys]) => <div key={name}><h3>{name}</h3>{keys.map(k => <div className="arow" key={k}><div>{ATTR_LABEL[k]}<div className="bar-bg"><div className="bar-fg" style={{ width: `${p.attrs[k]}%`, background: p.attrs[k] >= 80 ? 'var(--gold)' : p.attrs[k] >= 65 ? 'var(--green)' : '#8d948f' }} /></div></div><b>{p.attrs[k]}</b></div>)}</div>)}</div>
     {!p.known && <p className="sub" style={{ marginTop: 16 }}>This player's name ID isn't in the bundled name pool. Player ID {p.id}{world.career.club ? '' : ''}.</p>}
   </div></div>
+}
+
+function HistoryPosition({season,team,league,recorded,currentSeason,history,game,onSave}: {season:number;team:number;league:number;recorded:number;currentSeason:number;history:HistoryFinish[];game:Game|null;onSave:(key:string,position:number|null)=>Promise<void>}) {
+  const key=historyKey(season,team,league), manual=game?.historyPositions?.[key], recovered=recorded>0?null:recoverFinish(history,season,team,league)
+  const [editing,setEditing]=useState(false), [value,setValue]=useState(''), [busy,setBusy]=useState(false),[error,setError]=useState('')
+  const position=manual??(recorded>0?recorded:recovered)
+  async function save(position:number|null){setBusy(true);setError('');try{await onSave(key,position);setEditing(false)}catch(e){setError(String(e))}finally{setBusy(false)}}
+  return <div className="history-position"><b>{position??(season>=currentSeason?'In progress':'Not recorded')}</b>{manual!=null?<small>User-entered</small>:recovered!=null&&recorded<=0?<small>Recorded in another save</small>:null}
+  {game && (editing?<div><input aria-label={`Finish for season ${season} club ${team}`} type="number" min="1" max="100" value={value} onChange={e=>setValue(e.target.value)} /><button className="btn" disabled={busy||!value} onClick={()=>save(Number(value))}>Save finish</button><button className="btn" disabled={busy} onClick={()=>setEditing(false)}>Cancel</button>{manual!=null&&<button className="btn" disabled={busy} onClick={()=>save(null)}>Use recorded result</button>}</div>:<button className="btn" onClick={()=>{setValue(position==null?'':String(position));setEditing(true)}}>{position==null?'Set known finish':'Edit finish'}</button>)}{error&&<small role="alert">{error}</small>}</div>
 }

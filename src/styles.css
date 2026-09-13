@@ -201,3 +201,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, circle:focus-vi
 .competition-cell { min-width: 210px; max-width: 330px; white-space: normal !important; }
 .competition-cell .text-btn { display: block; margin: 4px 0; }
 .advanced-filters label:has(> input[type=checkbox]) { flex-direction: row; align-items: center; gap: 6px; padding-bottom: 7px; }
+
+.date-source { display: block; color: var(--ink-2); font-size: 11px; max-width: 260px; white-space: normal; margin: 4px 0; }
+.date-editor { display: flex; gap: 6px; margin: 7px 0; align-items: center; }
+
+.history-position { min-width: 110px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; white-space: normal; }
+.history-position small { color: var(--muted); font-size: 11px; }
+.history-position .btn { padding: 3px 6px; font-size: 11px; }
+.history-position input { width: 65px; }
+.history-position > div { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
