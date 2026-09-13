@@ -67,3 +67,7 @@ Every player is labelled with an archetype derived from their attributes, NBA 2K
 Style tags ("Finesse Shot", "Tiki Taka", "Deflector", …) are attribute-threshold badges modelled on PlayStyles. They are derived, not read from the game: the save only stores legacy trait bits and not the PlayStyle table.
 
 Search can filter by archetype and by style tag.
+
+## Design
+
+The UI follows the "Modernist" design handoff (`src/styles.css`): Archivo, zero-radius, 2px rules, and a club-colour accent. `useClubTheme` in `App.tsx` reads the viewed club's kit colours from the save and sets `--club` / `--club-ink` / `--club-tint` on `<html>`, so opening a club page (or switching clubs from the rail) rethemes the app. Near-white and near-black kit colours are skipped; with no club the accent falls back to the system red. Dark mode is unchanged (`[data-theme=dark]`); the rail's Active club switcher lists your club plus the rest of its league. Animations respect `prefers-reduced-motion`.

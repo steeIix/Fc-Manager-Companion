@@ -1,5 +1,5 @@
 import { Table } from './Table'
-import { Fragment, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import React, { Fragment, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { parseSave, isCareerSave, type Meta } from './parser'
 import { Snapshots } from './Snapshots'
 import { fromWorld, saveWithFile, getSnapshot, getSavedFile, saveSnapshot, allSnapshots, setHistoryPosition, recoverFinish, historyKey, type HistoryFinish, listGames, toggleTarget, type Game } from './snapshots'
@@ -8,12 +8,58 @@ import { depthIndex, opportunity, lineupIndex, inSavedXI } from './planning'
 import { ARCHETYPES, GROUP_LABEL, archetypeBlurb, type Group } from './archetypes'
 import { buildWorld, fmtMoney, fmtDate, posGroup, POS_ORDER, ATTR_GROUPS, ATTR_LABEL, type World, type Player, type Team, type League, type Names, type ValueModel } from './model'
 
+function useClubTheme(colors?: string[]) {
+  useEffect(() => {
+    const root = document.documentElement
+    const lum = (hex: string) => { const v = hex.replace('#', ''); return (parseInt(v.slice(0, 2), 16) * .299 + parseInt(v.slice(2, 4), 16) * .587 + parseInt(v.slice(4, 6), 16) * .114) / 255 }
+    // skip near-white and near-black kit colours — they can't carry the accent
+    const club = colors?.find(c => lum(c) > .12 && lum(c) < .72) ?? colors?.[0]
+    if (!club) { root.style.removeProperty('--club'); root.style.removeProperty('--club-ink'); root.style.removeProperty('--club-tint'); return }
+    const v = club.replace('#', '')
+    root.style.setProperty('--club', club)
+    root.style.setProperty('--club-ink', lum(club) > .62 ? '#201e1d' : '#ffffff')
+    root.style.setProperty('--club-tint', `rgba(${parseInt(v.slice(0, 2), 16)},${parseInt(v.slice(2, 4), 16)},${parseInt(v.slice(4, 6), 16)},.12)`)
+  }, [colors?.join()])
+}
+function useCountUp(target: number, ms = 620) {
+  const [n, setN] = useState(0)
+  useEffect(() => {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { setN(target); return }
+    let raf = 0; const t0 = performance.now()
+    const step = (now: number) => { const t = Math.min((now - t0) / ms, 1); setN(Math.round(target * (1 - Math.pow(1 - t, 3)))); if (t < 1) raf = requestAnimationFrame(step) }
+    raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(raf)
+  }, [target, ms])
+  return n
+}
+function Collapse({ open, children }: { open: boolean; children: React.ReactNode }) {
+  return <div style={{ display: 'grid', gridTemplateRows: open ? '1fr' : '0fr', overflow: 'hidden', transition: 'grid-template-rows .28s cubic-bezier(.2,.8,.2,1)' }}><div style={{ minHeight: 0, overflow: 'hidden' }}>{children}</div></div>
+}
+function ClubSwitcher({ world, viewed, go }: { world: World; viewed?: Team; go: (id: number) => void }) {
+  const [open, setOpen] = useState(false)
+  const t = viewed ?? world.career.club
+  const options = useMemo(() => {
+    const mine = world.career.club
+    const league = t ? world.leagues.find(l => l.id === t.leagueId)?.teams ?? [] : []
+    const list = [...(mine ? [mine] : []), ...league.filter(x => x.id !== mine?.id).slice().sort((a, b) => b.ovr - a.ovr)]
+    return list.slice(0, 24)
+  }, [world, t?.leagueId])
+  const swatch = (tm: Team, size = 14) => <span style={{ width: size, height: size, flex: 'none', display: 'inline-block', background: `linear-gradient(135deg, ${tm.colors[0]} 50%, ${tm.colors[1]} 50%)`, border: '1px solid rgba(243,242,242,.35)' }} />
+  if (!t) return null
+  return <div className="club-switch">
+    <div className="kicker">Active club</div>
+    <button className="trigger" onClick={() => setOpen(o => !o)} aria-expanded={open}>{swatch(t)}<span style={{ flex: 1, minWidth: 0 }}><b>{t.name}</b><span className="meta">{t.ovr} OVR · {t.league}</span></span><span style={{ transition: 'transform .2s', transform: open ? 'rotate(180deg)' : 'none' }}>▾</span></button>
+    <Collapse open={open}><div className="menu">{options.map(o => <button key={o.id} className={o.id === t.id ? 'on' : ''} onClick={() => { setOpen(false); go(o.id) }}>{swatch(o, 10)}<span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.name}{o.id === world.career.clubId ? ' · yours' : ''}</span><span className="meta">{o.ovr}</span></button>)}</div></Collapse>
+    <div className="meta" style={{ marginTop: 12, lineHeight: 1.5 }}>{world.career.manager} · Season {world.career.season}<br />As of {fmtDate(world.career.asOf)}</div>
+  </div>
+}
+
 function useTheme() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('fc26-theme') as 'light' | 'dark') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'))
   useEffect(() => { document.documentElement.dataset.theme = theme; localStorage.setItem('fc26-theme', theme) }, [theme])
   return { theme, toggle: () => setTheme(t => t === 'dark' ? 'light' : 'dark') }
 }
-const ThemeButton = ({ t }: { t: { theme: string; toggle: () => void } }) => <button className="theme-btn" onClick={t.toggle} aria-label="Toggle dark mode">{t.theme === 'dark' ? '☀ Light mode' : '☾ Dark mode'}</button>
+const ThemeButton = ({ t }: { t: { theme: string; toggle: () => void } }) => <button className="theme-btn" onClick={t.toggle} aria-label="Toggle dark mode">{t.theme === 'dark' ? '☀ Light' : '☾ Dark'}</button>
 
 type View = { kind: 'games' } | { kind: 'shortlist' } | { kind: 'snapshots' } | { kind: 'leagues' } | { kind: 'league'; id: number } | { kind: 'club'; id: number } | { kind: 'players' } | { kind: 'my' }
 
@@ -32,6 +78,8 @@ export default function App() {
   const [world, setWorld] = useState<World | null>(null)
   const [fileName, setFileName] = useState('')
   const [view, setView] = useState<View>({ kind: 'leagues' })
+  const viewedClub = view.kind === 'club' ? world?.teamById.get(view.id) : world?.career.club
+  useClubTheme(world ? viewedClub?.colors : undefined)
   const [sel, setSel] = useState<Player | null>(null)
   const [busy, setBusy] = useState('')
   const [err, setErr] = useState('')
@@ -84,8 +132,8 @@ export default function App() {
   return (
     <TargetContext.Provider value={{ ids: game?.shortlist ?? [], toggle }}><div className="shell">
       <aside className="rail">
-        <div className="brand">FC26 Manager Companion<small>{fileName}</small></div>
-        {c.club && <div className="club-chip"><b>{c.club.name}</b>{c.manager} · Season {c.season}<br />As of {fmtDate(c.asOf)}</div>}
+        <div className="brand"><small style={{ marginTop: 0, marginBottom: 6 }}>FC26 Companion</small>Manager Desk<small>{fileName}</small></div>
+        <ClubSwitcher world={world} viewed={viewedClub ?? undefined} go={id => setView({ kind: 'club', id })} />
         <nav>
           <button className={view.kind === 'games' ? 'on' : ''} onClick={() => setView({ kind: 'games' })}>Games &amp; saves</button>
           <button className={view.kind === 'shortlist' ? 'on' : ''} onClick={() => setView({ kind: 'shortlist' })}>Shortlist ({game?.shortlist.length ?? 0})</button>
@@ -94,7 +142,7 @@ export default function App() {
           <button className={view.kind === 'players' ? 'on' : ''} onClick={() => setView({ kind: 'players' })}>Player search</button>
           <button className={view.kind === 'snapshots' ? 'on' : ''} onClick={() => setView({ kind: 'snapshots' })}>Snapshots &amp; compare</button>
         </nav>
-        <div className="foot">{world.players.length.toLocaleString()} players · {world.teams.length} clubs · {world.leagues.length} leagues<br />Values are estimates from the game's rating curve; wages are shown only where the save holds a contract. In-game date is inferred from the latest event in the save.<br /><ThemeButton t={themeCtl} /><button onClick={() => { setWorld(null); setView({ kind: 'leagues' }) }}>Open another save</button></div>
+        <div className="foot">{world.players.length.toLocaleString()} players · {world.teams.length} clubs · {world.leagues.length} leagues<br />Values are estimates from the game's rating curve; wages are shown only where the save holds a contract. In-game date is inferred from the latest event in the save.<div style={{ display: 'flex', gap: 8, marginBottom: 12 }}><ThemeButton t={themeCtl} /><button style={{ margin: 0 }} onClick={() => { setWorld(null); setView({ kind: 'leagues' }) }}>New save</button></div></div>
       </aside>
       <main className="main">
         {err && <p className="err" role="alert">{err}</p>}{busy && <p role="status">{busy}</p>}
@@ -197,10 +245,11 @@ function LeagueView({ league, back, open, userClub, pick }: { league: League; ba
 }
 
 function ClubHeader({ t, world }: { t: Team; world: World }) {
+  const ovr = useCountUp(t.ovr)
   return <div className="club-head">
     <div className="stripe">{t.colors.map((c, i) => <i key={i} style={{ background: c }} />)}</div>
     <div className="body">
-      <div className="ovr">{t.ovr}<small>overall · <Stars n={t.stars} /></small></div>
+      <div className="ovr">{ovr}<small>overall · <Stars n={t.stars} /></small></div>
       <div><h1>{t.name}</h1><div className="meta">{t.league}{t.played ? ` · ${ordinal(t.tablePos)} in table, ${t.points} pts from ${t.played}` : ' · season not started'}{t.founded ? ` · est. ${t.founded}` : ''}{t.capacity ? ` · ${t.capacity.toLocaleString()} seats` : ''}{t.id === world.career.clubId ? ' · your club' : ''}</div></div>
       <div className="kpis">
         <div className="kpi"><b>{t.att} / {t.mid} / {t.def}</b><span>Attack / midfield / defence</span></div>
