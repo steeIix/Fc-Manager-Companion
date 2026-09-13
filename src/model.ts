@@ -1,4 +1,5 @@
 import type { Row } from './parser'
+import { rawScores, groupStats, finalize, type ArchetypeResult } from './archetypes'
 
 export const POS = ['GK','SW','RWB','RB','RCB','CB','LCB','LB','LWB','RDM','CDM','LDM','RM','RCM','CM','LCM','LM','RAM','CAM','LAM','RF','CF','LF','RW','RS','ST','LS','LW','SUB','RES']
 export const POS_SIMPLE: Record<string, string> = { SW:'CB', RCB:'CB', LCB:'CB', RDM:'CDM', LDM:'CDM', RCM:'CM', LCM:'CM', RAM:'CAM', LAM:'CAM', RF:'CF', LF:'CF', RS:'ST', LS:'ST' }
@@ -10,14 +11,14 @@ export type Names = { first: Record<string, string>; last: Record<string, string
 export type ValueModel = { ovrMin: number; ovr: number[]; ageMin: number; age: number[]; grp: number[]; k: number[] }
 
 export interface Player {
-  id: number; name: string; shortName: string; known: boolean; gender: number
+  id: number; name: string; fullName: string; shortName: string; known: boolean; gender: number
   ovr: number; pot: number; age: number; birth: string; nationality: number; nation: string
   pos: string; positions: string[]; foot: string; skill: number; weak: number; height: number; weight: number
   teamId: number; team: string; leagueId: number; league: string; jersey: number; nationalTeam: string | null; squadPos: string; injury: number
   contractUntil: number; value: number; wage: number | null; onLoanFrom: string | null; loanEnd: string | null
   face: { PAC: number; SHO: number; PAS: number; DRI: number; DEF: number; PHY: number }
   gk: { DIV: number; HAN: number; KIC: number; REF: number; POS: number; SPD: number }
-  attrs: Record<string, number>; leagueApps: number; leagueGoals: number; form: number
+  archetype: ArchetypeResult; attrs: Record<string, number>; leagueApps: number; leagueGoals: number; form: number
 }
 export interface Team {
   id: number; name: string; gender: number; ovr: number; att: number; mid: number; def: number; worth: number
@@ -133,7 +134,7 @@ export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Reco
     let common = ed?.commonname as string || (C ? dc.get(C) || names.common[C] || '' : '')
     let known = true, name: string, shortName: string
     if (common) { name = common; shortName = common }
-    else if (last) { name = (first ? first + ' ' : '') + last; shortName = (first ? first[0] + '. ' : '') + last }
+    else if (last) { name = (first ? first.split(' ')[0] + ' ' : '') + last; shortName = (first ? first[0] + '. ' : '') + last }
     else if (names.byId[id]) { name = shortName = names.byId[id] }
     else { known = false; name = shortName = `Unknown #${id}` }
     if (first === 'x') name = last, shortName = last
@@ -159,7 +160,7 @@ export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Reco
     const gk = { DIV: r.gkdiving as number, HAN: r.gkhandling as number, KIC: r.gkkicking as number, REF: r.gkreflexes as number, POS: r.gkpositioning as number, SPD: Math.floor((r.acceleration as number) * .45 + (r.sprintspeed as number) * .55) }
     const attrs: Record<string, number> = {}; for (const k of ATTR_KEYS) attrs[k] = r[k] as number
     const p: Player = {
-      id, name, shortName, known, gender: r.gender as number, ovr, pot, age, birth: fmtDate(birth),
+      id, name, fullName: common ? (first || last ? `${first} ${last}`.trim() : common) : `${first} ${last}`.trim() || name, shortName, known, gender: r.gender as number, ovr, pot, age, birth: fmtDate(birth),
       nationality: r.nationality as number, nation: nations[String(r.nationality)] ?? `Nation ${r.nationality}`,
       pos, positions, foot: (r.preferredfoot as number) === 1 ? 'Right' : 'Left', skill: r.skillmoves as number, weak: r.weakfootabilitytypecode as number,
       height: r.height as number, weight: r.weight as number,
@@ -168,11 +169,15 @@ export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Reco
       contractUntil: r.contractvaliduntil as number, value: estimateValue(vm, ovr, age, pot, isGK ? 'GK' : posGroup(pos)),
       wage: ct ? (ct.wage as number) : null,
       onLoanFrom: lo ? (teamById.get(lo.teamidloanedfrom as number)?.name ?? 'Unknown club') : null, loanEnd: lo ? fmtDate(lilianToDate(lo.loandateend as number)) : null,
-      face, gk, attrs, leagueApps: lk ? (lk.leagueappearances as number) : 0, leagueGoals: lk ? (lk.leaguegoals as number) : 0, form: lk ? (lk.form as number) : 0,
+      face, gk, attrs, archetype: null as unknown as ArchetypeResult, leagueApps: lk ? (lk.leagueappearances as number) : 0, leagueGoals: lk ? (lk.leaguegoals as number) : 0, form: lk ? (lk.form as number) : 0,
     }
     players.push(p); playerById.set(id, p)
     if (team) team.players.push(p)
   }
+  // Archetypes: two passes so each archetype is judged against the same position group's population.
+  const rawAll = players.map(p => rawScores(p.pos, p.attrs))
+  const stats = groupStats(rawAll)
+  players.forEach((p, i) => { p.archetype = finalize(rawAll[i].group, rawAll[i].raw, stats, p.attrs, { skill: p.skill, height: p.height, ovr: p.ovr }) })
   for (const tm of teams) {
     tm.players.sort((a, b) => POS_ORDER.indexOf(a.pos) - POS_ORDER.indexOf(b.pos) || b.ovr - a.ovr)
     tm.squadSize = tm.players.length

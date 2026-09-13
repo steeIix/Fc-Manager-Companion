@@ -55,3 +55,15 @@ Unofficial fan project, not affiliated with EA.
 The save doesn't store market values (the game computes them live), so the app estimates them with a model fitted on FC 26's own launch values: a rating curve × age curve × position group, plus terms for potential gap and youth (high-potential teenagers are valued much more aggressively, as in the game). Typical error is under 5%; top players land within ~10%. Values are rounded to game-like steps (€1M above €50M). Women's players currently use the same curve.
 
 The in-game date is inferred from the latest past event the game wrote into the save; contract dates are only used when they are within a month of that, so pre-contract agreements can't push the date forward.
+
+## Dark mode
+
+Toggle from the landing page or the sidebar; the choice is remembered in the browser and defaults to your system setting.
+
+## Archetypes
+
+Every player is labelled with an archetype derived from their attributes, NBA 2K-style (e.g. "Roaming Shadow Striker", "Ball-Playing Cover Defender"). `src/archetypes.ts` defines 30 archetypes across eight position groups (keepers, centre-backs, full-backs, defensive / central / attacking midfielders, wingers, strikers), each as a weighted attribute signature. Scores are z-normalised against every player in the same position group in the save, so the label describes a player's *shape* rather than how good they are; a close second archetype becomes a hybrid prefix, and a player strong across the board gets "Complete …". The profile shows the fit percentage and the scores for every archetype in the group.
+
+Style tags ("Finesse Shot", "Tiki Taka", "Deflector", …) are attribute-threshold badges modelled on PlayStyles. They are derived, not read from the game: the save only stores legacy trait bits and not the PlayStyle table.
+
+Search can filter by archetype and by style tag.

@@ -23,7 +23,7 @@ export function Snapshots({ currentId, refresh, gameId }: { currentId?: string; 
 
   return <>
     <h1>Snapshots</h1>{err && <p className="err">{err}</p>}
-    <p className="sub">Every save you open is kept here in your browser. Save numbers follow import order. Compare any two saves, including your first and latest, with no estimated calendar dates, ages or market values.</p>
+    <p className="sub">Every save you open is kept here in your browser. Save numbers follow import order. Compare any two saves to see who improved, who declined, and who came and went.</p>
     {list.length === 0 ? <p className="sub">No snapshots yet. Open a save and it will appear here.</p> :
       <Table className="tbl"><thead><tr><th>Snapshot</th><th className="num">Season</th><th>Club</th><th>File</th><th className="num">Players</th><th></th></tr></thead><tbody>
         {list.map(m => <tr key={m.id} className={m.id === currentId ? 'user' : ''}>

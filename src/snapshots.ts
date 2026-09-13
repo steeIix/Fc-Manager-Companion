@@ -1,5 +1,5 @@
 import type { World } from './model'
-export interface PSnap { id: number; n: string; ovr: number; pot: number; age: number; birth?: string; contract?: number | null; pos: string; t: number; team: string; v: number; g: number }
+export interface PSnap { id: number; n: string; ovr: number; pot: number; age: number; birth?: string; contract?: number | null; pos: string; t: number; team: string; v: number; g: number; ar?: string }
 export interface TSnap { id: number; n: string; ovr: number; v: number; lg: string }
 export interface Snapshot { order?: number; history?: HistoryFinish[]; id: string; gameId?: string; label: string; fileName: string; savedAt: number; asOf: number; season: number; manager: string; clubId: number; club: string; players: PSnap[]; teams: TSnap[] }
 export type SnapMeta = Omit<Snapshot, 'players' | 'teams'> & { playerCount: number }
@@ -39,7 +39,7 @@ const tx = <T,>(store: string, mode: IDBTransactionMode, work: (s: IDBObjectStor
 export function fromWorld(w: World, fileName: string, gameId = 'legacy'): Snapshot {
   const c = w.career
   return { id: crypto.randomUUID(), gameId, label: '', fileName, savedAt: Date.now(), asOf: c.asOf.getTime(), season: c.season, manager: c.manager, clubId: c.clubId, club: c.club?.name ?? '',
-    players: w.players.map(p => ({ id: p.id, n: p.name, ovr: p.ovr, pot: p.pot, age: p.age, birth: p.birth, contract: p.contractUntil || null, pos: p.pos, t: p.teamId, team: p.team, v: p.value, g: p.gender })),
+    players: w.players.map(p => ({ id: p.id, n: p.name, ovr: p.ovr, pot: p.pot, age: p.age, birth: p.birth, contract: p.contractUntil || null, pos: p.pos, t: p.teamId, team: p.team, v: p.value, g: p.gender, ar: p.archetype.label })),
     history: c.history.map(h => ({ season: Number(h.season), team: Number(h.teamid), league: Number(h.leagueid), position: Number(h.tableposition), completed: Number(h.season) < c.season })),
     teams: w.teams.map(t => ({ id: t.id, n: t.name, ovr: t.ovr, v: t.squadValue, lg: t.league })) }
 }
