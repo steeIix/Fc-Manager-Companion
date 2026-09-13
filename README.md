@@ -71,3 +71,16 @@ Search can filter by archetype and by style tag.
 ## Design
 
 The UI follows the "Modernist" design handoff (`src/styles.css`): Archivo, zero-radius, 2px rules, and a club-colour accent. `useClubTheme` in `App.tsx` reads the viewed club's kit colours from the save and sets `--club` / `--club-ink` / `--club-tint` on `<html>`, so opening a club page (or switching clubs from the rail) rethemes the app. Near-white and near-black kit colours are skipped; with no club the accent falls back to the system red. Dark mode is unchanged (`[data-theme=dark]`); the rail's Active club switcher lists your club plus the rest of its league. Animations respect `prefers-reduced-motion`.
+
+## Club crests
+
+Crests are shown in the club header, league tables, rosters, search, the player profile and the rail switcher. Sources, in order:
+
+1. **Local pack** — `public/logos/{teamId}.png` (or `.svg`). Build it from the free packs at https://football-logos.cc/collections/:
+   download the leagues you want, unzip them into one folder, then run `node scripts/import-logos.mjs ./packs`.
+   Files are matched to EA team ids by club name using `public/data/teams-ref.json`; the script lists any clubs it
+   couldn't match so you can pin them in `scripts/logo-overrides.json` (`"teamId": "file-slug"`). Commit `public/logos`
+   and redeploy. Logo copyright belongs to the clubs; the pack site's licence notes apply.
+2. **CDN fallback** — `public/data/logos.json` maps ~480 EA team ids to sofifa's crest images, used when no local file exists.
+   This makes requests to `cdn.sofifa.net` from the visitor's browser; turn it off with the "Club crests" checkbox in the sidebar.
+3. **Kit-colour swatch** — always available, drawn from the save.
