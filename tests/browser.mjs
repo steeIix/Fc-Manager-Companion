@@ -19,6 +19,16 @@ await page.goto(base)
 await page.getByRole('combobox',{name:'Active game'}).selectOption('legacy')
 await page.locator('.zone input').setInputFiles(fixture('first'))
 await page.getByRole('button',{name:'Squad planning & depth',exact:true}).waitFor()
+// Header/body cells must share exactly the same column geometry, even on wide tables.
+async function checkAlignment() {
+ const failures=await page.locator('table.tbl').evaluateAll(tables=>tables.flatMap(t=>{
+   const head=[...t.querySelectorAll('thead tr:first-child th')];
+   const row=[...t.querySelectorAll('tbody tr')].find(r=>r.children.length===head.length);
+   if(!row) return [];
+   return head.flatMap((h,i)=>{const a=h.getBoundingClientRect(), b=row.children[i].getBoundingClientRect();return Math.abs(a.x-b.x)>1 || Math.abs(a.width-b.width)>1 ? [`Column ${i} misaligned`] : []})
+ })); assert.deepEqual(failures,[])
+}
+await checkAlignment()
 await page.getByRole('button',{name:'Youth (2)',exact:true}).click()
 await page.getByRole('heading',{name:'Youth academy',exact:true}).waitFor()
 assert.match(await page.locator('main').innerText(),/Youth Fixture/)
@@ -98,6 +108,30 @@ const checks=await page.evaluate(async()=>{
  if(await db.getSavedFile(importedSnaps[0].id)) throw Error('Snapshot delete left its raw save')
  return {games:games.length,planner:'unique optimal assignment',roundtrip:'byte-exact',invalidImport:'atomic rejection',delete:'snapshot and file removed'}
 })
+await page.getByRole('button',{name:'Player search',exact:true}).click()
+await page.getByLabel('Search position').selectOption('CM')
+await page.getByLabel('Club role').selectOption('buried')
+await page.getByRole('button',{name:'Add ThirdCM Fixture to shortlist',exact:true}).waitFor()
+const cmRows=page.locator('tbody tr')
+assert.equal(await cmRows.count(),1)
+assert.match(await cmRows.innerText(),/Neves Fixture/)
+assert.match(await cmRows.innerText(),/Vitinha Fixture/)
+assert.match(await cmRows.innerText(),/2 starting slots/)
+await checkAlignment()
+await page.screenshot({path:fileURLToPath(new URL('./search-alignment-qa.png',import.meta.url)),fullPage:true})
+await page.getByLabel('Search position').selectOption('RM')
+await page.getByLabel('Club role').selectOption('all')
+assert.equal(await page.locator('tbody tr').count(),1)
+assert.doesNotMatch(await page.locator('tbody').innerText(),/Palmer/)
+await page.getByLabel('Club role').selectOption('backup')
+assert.equal(await page.locator('tbody tr').count(),0)
+await page.getByLabel('Position matching').selectOption('all')
+await page.getByRole('button',{name:'Add Estevao Fixture to shortlist',exact:true}).waitFor()
+assert.match(await page.locator('tbody').innerText(),/Palmer Fixture/)
+await page.setViewportSize({width:700,height:1000})
+await checkAlignment()
+const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)
+assert.equal(overflow,false,'Tables must scroll internally on narrow screens')
 assert.deepEqual(errors,[])
 console.log(JSON.stringify({status:'PASS',checks},null,2))
 await browser.close()

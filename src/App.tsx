@@ -1,9 +1,10 @@
+import { Table } from './Table'
 import { Fragment, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { parseSave, isCareerSave, type Meta } from './parser'
 import { Snapshots } from './Snapshots'
 import { fromWorld, saveWithFile, listGames, toggleTarget, type Game } from './snapshots'
 import { Games, Timeline, Youth, Planner, Shortlist } from './Features'
-import { depthIndex, depthRank, inSavedXI } from './planning'
+import { depthIndex, opportunity, lineupIndex, inSavedXI } from './planning'
 import { buildWorld, fmtMoney, fmtDate, posGroup, POS_ORDER, ATTR_GROUPS, ATTR_LABEL, type World, type Player, type Team, type League, type Names, type ValueModel } from './model'
 
 type View = { kind: 'games' } | { kind: 'shortlist' } | { kind: 'snapshots' } | { kind: 'leagues' } | { kind: 'league'; id: number } | { kind: 'club'; id: number } | { kind: 'players' } | { kind: 'my' }
@@ -138,7 +139,7 @@ function LeagueView({ league, back, open, userClub }: { league: League; back: ()
     <div className="crumb"><button onClick={back}>Leagues</button><span>/</span><span>{league.name}</span></div>
     <h1>{league.name}</h1>
     <p className="sub">{league.teams.length} clubs · average rating {league.avgOvr}{league.women ? ' · women\'s competition' : ''}</p>
-    <table className="tbl"><thead><tr>
+    <Table className="tbl"><thead><tr>
       {hasTable && <Th id="pos" label="#" num />}<Th id="name" label="Club" /><Th id="ovr" label="OVR" num /><Th id="att" label="ATT" num /><Th id="mid" label="MID" num /><Th id="def" label="DEF" num /><th>Stars</th><Th id="squadValue" label="Squad value" num /><Th id="worth" label="Club worth" num /><Th id="squadSize" label="Squad" num /><Th id="avgAge" label="Avg age" num />
       {hasTable && <><Th id="played" label="P" num /><Th id="points" label="Pts" num /></>}
     </tr></thead><tbody>
@@ -148,7 +149,7 @@ function LeagueView({ league, back, open, userClub }: { league: League; back: ()
         <td><Stars n={t.stars} /></td><td className="num">{fmtMoney(t.squadValue)}</td><td className="num">{t.worth ? fmtMoney(t.worth) : '–'}</td><td className="num">{t.squadSize}</td><td className="num">{t.avgAge}</td>
         {hasTable && <><td className="num">{t.played}</td><td className="num"><b>{t.points}</b></td></>}
       </tr>)}
-    </tbody></table>
+    </tbody></Table>
   </>
 }
 
@@ -180,7 +181,7 @@ function Roster({ players, world, pick, wages }: { players: Player[]; world: Wor
   let lastGrp = ''
   return <>
     <div className="bar"><span style={{ color: 'var(--ink-2)' }}>Order by</span><div className="seg">{(['pos', 'ovr', 'pot', 'value', 'age'] as const).map(k => <button key={k} className={mode === k ? 'on' : ''} onClick={() => setMode(k)}>{{ pos: 'Position', ovr: 'Overall', pot: 'Potential', value: 'Value', age: 'Age' }[k]}</button>)}</div><span className="count">{players.length} players</span></div>
-    <table className="tbl"><thead><tr><th className="num">#</th><th>Player</th><th>Pos</th><th>Also</th><th className="num">Age</th><th>Nation</th><th className="num">OVR</th><th className="num">POT</th><th className="num">Value</th>{wages && <th className="num">Wage / wk</th>}<th className="num">Contract</th><th className="num">Goals</th></tr></thead><tbody>
+    <Table className="tbl"><thead><tr><th className="num">#</th><th>Player</th><th>Pos</th><th>Also</th><th className="num">Age</th><th>Nation</th><th className="num">OVR</th><th className="num">POT</th><th className="num">Value</th>{wages && <th className="num">Wage / wk</th>}<th className="num">Contract</th><th className="num">Goals</th></tr></thead><tbody>
       {rows.map(p => {
         const g = mode === 'pos' ? posGroup(p.pos) : ''
         const head = g && g !== lastGrp ? <tr className="grp" key={'g' + g}><td colSpan={wages ? 12 : 11}>{{ GK: 'Goalkeepers', DEF: 'Defenders', MID: 'Midfielders', ATT: 'Forwards' }[g]}</td></tr> : null
@@ -194,7 +195,7 @@ function Roster({ players, world, pick, wages }: { players: Player[]; world: Wor
           <td className="num">{p.contractUntil || '–'}</td><td className="num dim">{p.leagueGoals}</td>
         </tr></Fragment>
       })}
-    </tbody></table>
+    </tbody></Table>
   </>
 }
 
@@ -224,16 +225,16 @@ function MyClub({ world, open, pick }: { world: World; open: () => void; pick: (
     </div>
     {c.history.length > 0 && <>
       <h2>Manager history</h2>
-      <table className="tbl"><thead><tr><th className="num">Season</th><th>Club</th><th>League</th><th className="num">Pos</th><th className="num">P</th><th className="num">W</th><th className="num">D</th><th className="num">L</th><th className="num">GF</th><th className="num">GA</th><th className="num">Pts</th><th>Biggest signing</th><th>Biggest sale</th><th className="num">Job security</th></tr></thead><tbody>
-        {c.history.map(h => <tr key={String(h.season)}><td className="num">{h.season as number}</td><td className="name">{world.teamById.get(h.teamid as number)?.name ?? '–'}</td><td className="dim">{world.leagues.find(l => l.id === h.leagueid)?.name ?? '–'}</td><td className="num">{h.tableposition as number}</td><td className="num">{h.games_played as number}</td><td className="num">{h.wins as number}</td><td className="num">{h.draws as number}</td><td className="num">{h.losses as number}</td><td className="num">{h.goals_for as number}</td><td className="num">{h.goals_against as number}</td><td className="num"><b>{h.points as number}</b></td>
+      <Table className="tbl"><thead><tr><th className="num">Season</th><th>Club</th><th>League</th><th className="num">Pos</th><th className="num">P</th><th className="num">W</th><th className="num">D</th><th className="num">L</th><th className="num">GF</th><th className="num">GA</th><th className="num">Pts</th><th>Biggest signing</th><th>Biggest sale</th><th className="num">Job security</th></tr></thead><tbody>
+        {c.history.map((h, i) => <tr key={`${h.season}-${h.teamid}-${i}`}><td className="num">{h.season as number}</td><td className="name">{world.teamById.get(h.teamid as number)?.name ?? '–'}</td><td className="dim">{world.leagues.find(l => l.id === h.leagueid)?.name ?? '–'}</td><td className="num">{h.tableposition as number}</td><td className="num">{h.games_played as number}</td><td className="num">{h.wins as number}</td><td className="num">{h.draws as number}</td><td className="num">{h.losses as number}</td><td className="num">{h.goals_for as number}</td><td className="num">{h.goals_against as number}</td><td className="num"><b>{h.points as number}</b></td>
           <td>{h.bigbuyplayername ? `${h.bigbuyplayername} (${fmtMoney(h.bigbuyamount as number)})` : '–'}</td><td>{h.bigsellplayername ? `${h.bigsellplayername} (${fmtMoney(h.bigsellamount as number)})` : '–'}</td><td className="num">{h.jobsecurityscore as number}</td></tr>)}
-      </tbody></table>
+      </tbody></Table>
     </>}
     {rising.length > 0 && <>
       <h2>Room to grow</h2>
-      <table className="tbl"><thead><tr><th>Player</th><th>Pos</th><th className="num">Age</th><th className="num">OVR</th><th className="num">POT</th><th className="num">Value</th></tr></thead><tbody>
+      <Table className="tbl"><thead><tr><th>Player</th><th>Pos</th><th className="num">Age</th><th className="num">OVR</th><th className="num">POT</th><th className="num">Value</th></tr></thead><tbody>
         {rising.map(p => <tr key={p.id} className="click" onClick={() => pick(p)}><td className="name">{p.name}</td><td><Pos p={p.pos} /></td><td className="num">{p.age}</td><td className="num"><Rating v={p.ovr} /></td><td className="num"><Rating v={p.pot} /></td><td className="num">{fmtMoney(p.value)}</td></tr>)}
-      </tbody></table>
+      </tbody></Table>
     </>}
     <h2>Squad</h2>
     <Roster players={t.players} world={world} pick={pick} wages />
@@ -246,16 +247,19 @@ const R = ({ v, set }: { v: number[]; set: (v: number[]) => void }) => <><input 
 
 function Search({ world, pick, openClub }: { world: World; pick: (p: Player) => void; openClub: (id: number) => void }) {
   const [role, setRole] = useState('all'), [maxValue, setMaxValue] = useState(''), [contract, setContract] = useState(''), [foot, setFoot] = useState(''), [minGrowth, setMinGrowth] = useState(''), [minSkill, setMinSkill] = useState(''), [minWeak, setMinWeak] = useState(''), [fit, setFit] = useState(false), [notLoan, setNotLoan] = useState(false)
-  const depth = useMemo(() => depthIndex(world), [world])
+  const [includeSecondary, setIncludeSecondary] = useState(false), [slotOverride, setSlotOverride] = useState(0), [minAhead, setMinAhead] = useState(0)
+  const depth = useMemo(() => depthIndex(world, includeSecondary), [world, includeSecondary])
+  const lineups = useMemo(() => lineupIndex(world), [world])
   const youthIds = useMemo(() => new Set(world.youth.map(y => y.id)), [world])
   const [q, setQ] = useState(''); const [g, setG] = useState<'all' | 0 | 1>('all'); const [pos, setPos] = useState('')
   const [ovr, setOvr] = useState([40, 99]); const [pot, setPot] = useState([40, 99]); const [age, setAge] = useState([15, 45]); const [lg, setLg] = useState(-2); const [page, setPage] = useState(0)
+  const opportunities = useMemo(() => new Map(world.players.map(p => [p.id, opportunity(depth, lineups, p, pos || p.pos, slotOverride)])), [world, depth, lineups, pos, slotOverride])
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase()
     return world.players.filter(p => !youthIds.has(p.id) &&
       (!maxValue || p.value <= Number(maxValue) * 1e6) && (!contract || (p.contractUntil > 0 && p.contractUntil <= Number(contract))) && (!foot || p.foot === foot) && (!minGrowth || p.pot - p.ovr >= Number(minGrowth)) && (!minSkill || p.skill >= Number(minSkill)) && (!minWeak || p.weak >= Number(minWeak)) && (!fit || !p.injury) && (!notLoan || !p.onLoanFrom) &&
-      (role === 'all' || (role === 'backup' && (depthRank(depth, p, pos || p.pos).rank ?? 0) > 1) || (role === 'best' && depthRank(depth, p, pos || p.pos).rank === 1) || (role === 'bench' && p.teamId >= 0 && ['SUB','RES'].includes(p.squadPos)) || (role === 'xi' && p.teamId >= 0 && inSavedXI(p))) && (g === 'all' || p.gender === g) && (!pos || p.positions.includes(pos)) && p.ovr >= ovr[0] && p.ovr <= ovr[1] && p.pot >= pot[0] && p.pot <= pot[1] && p.age >= age[0] && p.age <= age[1] && (lg === -2 || p.leagueId === lg) && (!s || p.name.toLowerCase().includes(s) || p.team.toLowerCase().includes(s) || p.nation.toLowerCase().includes(s)))
-  }, [world, q, g, pos, ovr, pot, age, lg, role, maxValue, contract, foot, minGrowth, minSkill, minWeak, fit, notLoan, depth, youthIds])
+      opportunities.get(p.id)!.ahead.length >= minAhead && (role === 'all' || (role === 'backup' && opportunities.get(p.id)!.blocked) || (role === 'best' && opportunities.get(p.id)!.rank !== null && opportunities.get(p.id)!.slots > 0 && !opportunities.get(p.id)!.blocked) || (role === 'buried' && opportunities.get(p.id)!.blocked && opportunities.get(p.id)!.ahead.length >= 2) || (role === 'bench' && p.teamId >= 0 && ['SUB','RES'].includes(p.squadPos)) || (role === 'xi' && p.teamId >= 0 && inSavedXI(p))) && (g === 'all' || p.gender === g) && (!pos || (includeSecondary ? p.positions.includes(pos) : p.pos === pos)) && p.ovr >= ovr[0] && p.ovr <= ovr[1] && p.pot >= pot[0] && p.pot <= pot[1] && p.age >= age[0] && p.age <= age[1] && (lg === -2 || p.leagueId === lg) && (!s || p.name.toLowerCase().includes(s) || p.team.toLowerCase().includes(s) || p.nation.toLowerCase().includes(s)))
+  }, [world, q, g, pos, ovr, pot, age, lg, role, maxValue, contract, foot, minGrowth, minSkill, minWeak, fit, notLoan, depth, youthIds, opportunities, minAhead, includeSecondary])
   const { sorted, Th } = useSort(rows, 'ovr', (p, k) => (p as any)[k])
   useEffect(() => setPage(0), [rows])
   const per = 100, pages = Math.ceil(sorted.length / per)
@@ -265,7 +269,7 @@ function Search({ world, pick, openClub }: { world: World; pick: (p: Player) => 
     <div className="bar">
       <input type="text" placeholder="Name, club or nation" value={q} onChange={e => setQ(e.target.value)} />
       <div className="seg"><button className={g === 'all' ? 'on' : ''} onClick={() => setG('all')}>All</button><button className={g === 0 ? 'on' : ''} onClick={() => setG(0)}>Men</button><button className={g === 1 ? 'on' : ''} onClick={() => setG(1)}>Women</button></div>
-      <select value={pos} onChange={e => setPos(e.target.value)}><option value="">Any position</option>{POS_ORDER.map(p => <option key={p}>{p}</option>)}</select>
+      <select aria-label="Search position" value={pos} onChange={e => setPos(e.target.value)}><option value="">Any position</option>{POS_ORDER.map(p => <option key={p}>{p}</option>)}</select>
       <select value={lg} onChange={e => setLg(+e.target.value)}><option value={-2}>Any league</option><option value={-1}>Free agents</option>{world.leagues.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select>
     </div>
     <div className="bar">
@@ -273,7 +277,10 @@ function Search({ world, pick, openClub }: { world: World; pick: (p: Player) => 
       <span className="count">{sorted.length.toLocaleString()} players</span>
     </div>
     <div className="bar advanced-filters">
-      <label>Club role<select value={role} onChange={e => setRole(e.target.value)}><option value="all">Any role</option><option value="backup">Not highest OVR at position</option><option value="best">Highest OVR at position</option><option value="bench">Saved substitutes / reserves</option><option value="xi">Saved starting XI</option></select></label>
+      <label>Club role<select value={role} onChange={e => setRole(e.target.value)}><option value="all">Any role</option><option value="backup">Outside starting slots</option><option value="buried">Buried behind 2+ players</option><option value="best">Within starting slots</option><option value="bench">Saved substitutes / reserves</option><option value="xi">Saved starting XI</option></select></label>
+      <label>Position matching<select value={includeSecondary ? 'all' : 'primary'} onChange={e => setIncludeSecondary(e.target.value === 'all')}><option value="primary">Primary position only</option><option value="all">Include secondary positions</option></select></label>
+      <label>Starting slots<select value={slotOverride} onChange={e => setSlotOverride(Number(e.target.value))}><option value={0}>Auto: saved XI / estimate</option>{[1,2,3,4].map(n => <option key={n} value={n}>{n} starting slot{n > 1 ? 's' : ''}</option>)}</select></label>
+      <label>Minimum players ahead<select value={minAhead} onChange={e => setMinAhead(Number(e.target.value))}>{[0,1,2,3,4].map(n => <option key={n} value={n}>{n === 0 ? 'Any' : `${n}+ higher-rated players`}</option>)}</select></label>
       <label>Max value (€M)<input type="number" min="0" value={maxValue} onChange={e => setMaxValue(e.target.value)} /></label>
       <label>Contract ending by<input type="number" min="2000" placeholder="Year" value={contract} onChange={e => setContract(e.target.value)} /></label>
       <label>Min growth (POT − OVR)<input type="number" min="0" value={minGrowth} onChange={e => setMinGrowth(e.target.value)} /></label>
@@ -281,16 +288,16 @@ function Search({ world, pick, openClub }: { world: World; pick: (p: Player) => 
       <label>Min skills<select value={minSkill} onChange={e => setMinSkill(e.target.value)}><option value="">Any</option>{[1,2,3,4,5].map(n => <option key={n} value={n}>{n}★</option>)}</select></label>
       <label>Min weak foot<select value={minWeak} onChange={e => setMinWeak(e.target.value)}><option value="">Any</option>{[1,2,3,4,5].map(n => <option key={n} value={n}>{n}★</option>)}</select></label>
       <label><input type="checkbox" checked={fit} onChange={e => setFit(e.target.checked)} /> Fit players only</label><label><input type="checkbox" checked={notLoan} onChange={e => setNotLoan(e.target.checked)} /> Exclude loans</label>
-      <button className="btn" onClick={() => { setQ(''); setG('all'); setPos(''); setOvr([40,99]); setPot([40,99]); setAge([15,45]); setLg(-2); setRole('all'); setMaxValue(''); setContract(''); setFoot(''); setMinGrowth(''); setMinSkill(''); setMinWeak(''); setFit(false); setNotLoan(false) }}>Reset filters</button>
-    </div><p className="note">Position hierarchy is based on OVR among all eligible club players, including secondary positions. Equal OVR shares first place. Without a position filter, each player's primary position is used. Saved XI is the lineup stored in the file, not a guarantee of playing time.</p>
+      <button className="btn" onClick={() => { setQ(''); setG('all'); setPos(''); setOvr([40,99]); setPot([40,99]); setAge([15,45]); setLg(-2); setRole('all'); setMaxValue(''); setContract(''); setFoot(''); setMinGrowth(''); setMinSkill(''); setMinWeak(''); setFit(false); setNotLoan(false); setIncludeSecondary(false); setSlotOverride(0); setMinAhead(0) }}>Reset filters</button>
+    </div><p className="note">Primary positions only by default. Two starting CM slots can accommodate the top two CMs. Slot counts use a complete saved XI; otherwise estimates are labelled (CB/CM/CDM: 2; others: 1). You can override the slot count. Recorded starters are never marked buried; players starting elsewhere do not block this position. Equal OVR does not count as ahead. Secondary-position comparisons are optional.</p>
     {!sorted.length && <p className="sub">No players match these filters.</p>}
-    <table className="tbl"><thead><tr><th>Star</th><Th id="name" label="Player" /><th>Pos</th><Th id="age" label="Age" num /><th>Nation</th><Th id="team" label="Club" /><Th id="ovr" label="OVR" num /><Th id="pot" label="POT" num /><Th id="value" label="Value" num /><Th id="contractUntil" label="Contract" num /><th>Position rank</th><th>Best club option</th></tr></thead><tbody>
+    <Table className="tbl"><thead><tr><th>Star</th><Th id="name" label="Player" /><th>Pos</th><Th id="age" label="Age" num /><th>Nation</th><Th id="team" label="Club" /><Th id="ovr" label="OVR" num /><Th id="pot" label="POT" num /><Th id="value" label="Value" num /><Th id="contractUntil" label="Contract" num /><th>Starting opportunity</th><th>Players ahead at this position</th></tr></thead><tbody>
       {sorted.slice(page * per, page * per + per).map(p => <tr key={p.id} className="click" onClick={() => pick(p)}>
         <td><StarButton p={p} /></td><td className="name"><span className={p.known ? '' : 'unk'}>{p.name}</span>{p.onLoanFrom && <span className="tag loan">Loan</span>}</td><td><Pos p={p.pos} />{p.positions.length > 1 && <span className="dim" style={{ color: 'var(--ink-3)', marginLeft: 6, fontSize: 12 }}>{p.positions.slice(1).join(' ')}</span>}</td>
         <td className="num">{p.age}</td><td>{p.nation}</td><td>{p.teamId >= 0 ? <a href="#" onClick={e => { e.preventDefault(); e.stopPropagation(); openClub(p.teamId) }}>{p.team}</a> : <span className="dim">Free agent</span>}</td>
-        <td className="num"><Rating v={p.ovr} /></td><td className="num"><Rating v={p.pot} /></td><td className="num">{fmtMoney(p.value)}</td><td className="num">{p.contractUntil || '–'}</td><td>{depthRank(depth,p,pos || p.pos).rank ? `#${depthRank(depth,p,pos || p.pos).rank} · ${pos || p.pos}` : 'Unassigned'}</td><td>{(() => { const best = depthRank(depth,p,pos || p.pos).best; return best ? <button className="text-btn" onClick={e => { e.stopPropagation(); pick(best) }}>{best.name} · {best.ovr}{best.id !== p.id && best.ovr === p.ovr ? ' (joint best)' : ''}</button> : '—' })()}</td>
+        <td className="num"><Rating v={p.ovr} /></td><td className="num"><Rating v={p.pot} /></td><td className="num">{fmtMoney(p.value)}</td><td className="num">{p.contractUntil || '–'}</td><td className="hierarchy-cell">{(() => { const h = opportunities.get(p.id)!; return <><b>{h.status}</b><small>{h.rank !== null ? `#${h.rank} · ${pos || p.pos} · ${h.slots} starting slot${h.slots === 1 ? '' : 's'}` : 'Unassigned'}<br />{h.source}</small></> })()}</td><td className="competition-cell">{(() => { const h = opportunities.get(p.id)!; return h.ahead.length ? <>{h.ahead.map(a => <button key={a.id} className="text-btn" onClick={e => { e.stopPropagation(); pick(a) }}>{a.name} · {a.ovr}<small>{a.pos}{a.pos !== (pos || p.pos) ? ' · secondary option' : ' · primary'}{inSavedXI(a) ? ` · saved: ${a.squadPos}` : ''}</small></button>)}</> : h.rank !== null ? <span className="dim">No higher-rated peers</span> : '—' })()}</td>
       </tr>)}
-    </tbody></table>
+    </tbody></Table>
     {pages > 1 && <div className="pager"><button disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</button><span>Page {page + 1} of {pages}</span><button disabled={page >= pages - 1} onClick={() => setPage(page + 1)}>Next</button></div>}
   </>
 }

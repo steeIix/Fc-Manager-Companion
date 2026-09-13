@@ -1,4 +1,4 @@
-# FC26 Manager Companion — v3
+# FC26 Manager Companion — v3.1
 
 A browser-based reader for FC 26 career saves. Save parsing, games, snapshots and shortlists stay in your browser. The app does not modify FC save files.
 
@@ -65,13 +65,17 @@ Star a player from search or their profile. The shortlist belongs to the current
 
 Search retains name/club/nation, gender, league, position, OVR, POT and age controls. New filters include:
 
-- Not highest OVR at the selected position; highest OVR; saved substitutes/reserves; saved starting XI.
+- Outside starting slots; buried behind 2+ players; within starting slots; saved substitutes/reserves; saved starting XI.
+- Primary position only (default), with an explicit option to include secondary positions.
+- Automatic starting-slot counts, a manual 1–4 slot override, and a minimum number of higher-rated players ahead.
 - Maximum estimated value in €M, contract ending by year, and minimum POT-minus-OVR growth.
 - Preferred foot, minimum skill/weak-foot stars, fit-only and exclude loans.
 
-**Example:** select `ST`, choose `Not highest OVR at position`, and sort OVR descending. Each result shows its rank and a clickable best club option with that player's OVR. The same works for every supported position.
+**Example:** select `CM`, choose `Buried behind 2+ players`, and sort OVR descending. If a club has two CM slots, its top two CMs fit; the third CM shows both higher-rated players ahead. Select `RM` with primary-only matching and a primary CAM with secondary RM will not enter the comparison.
 
-Ranking includes secondary positions. Equal OVR shares first place; a POT tiebreak does not turn an equally rated player into a backup. If no position is selected, each player's primary position is used. The saved lineup is shown separately because rating hierarchy is not proof of who starts actual matches. Free agents are not assigned a club hierarchy.
+Ranking uses primary positions by default, even when no position is selected. All higher-rated peers are listed with clickable profiles, primary position and recorded lineup position. Equal OVR never counts as ahead. Players recorded as starters elsewhere are excluded from that position's blockers when the saved XI is complete.
+
+Starting-slot counts come from the saved lineup only when it has exactly 11 players and one goalkeeper. Otherwise the UI explicitly labels estimates: two CB/CM/CDM slots, one at other positions. Use the manual override if these estimates do not match the club's shape. Complete saved XIs can also establish that a position has zero slots. Recorded starters are not labelled buried, even if a higher-rated player exists. These are squad-opportunity indicators, not predictions of actual playing time. Free agents have no club hierarchy.
 
 ## Accuracy and verification
 
@@ -101,3 +105,9 @@ Browser tests start a local Vite server on port 5173 and write QA screenshots in
 - `src/Snapshots.tsx`: per-game comparison and clickable historical players.
 
 Unofficial fan project, not affiliated with EA.
+
+## v3.1 fixes
+
+All data tables now keep their headers and rows in one shared column layout. A surrounding container provides horizontal scrolling instead of separating the header and body into independent tables. Manager-history rows also use unique keys across club changes within a season.
+
+Regression tests cover two starting CMs, a third CM behind both, primary CAM versus primary RM, explicit secondary matching, complete saved lineups, manual slot overrides, and header/body alignment at desktop and narrow widths.

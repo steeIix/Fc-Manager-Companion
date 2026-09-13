@@ -1,4 +1,4 @@
-import type { Player, World } from './model'
+import { POS_ORDER, POS_SIMPLE, type Player, type World } from './model'
 export const FORMATIONS: Record<string, string[][]> = {
   '4-3-3': [['LW','ST','RW'], ['CM','CDM','CM'], ['LB','CB','CB','RB'], ['GK']],
   '4-2-3-1': [['ST'], ['LM','CAM','RM'], ['CDM','CDM'], ['LB','CB','CB','RB'], ['GK']],
@@ -35,9 +35,9 @@ export function assignXI(players: Player[], positions: string[]): (Player | unde
   for (let j = 1; j <= m; j++) if (p[j] && j <= players.length && players[j - 1].positions.includes(positions[p[j] - 1])) result[p[j] - 1] = players[j - 1]
   return result
 }
-export function depthIndex(world: World) {
+export function depthIndex(world: World, includeSecondary = false) {
   const index = new Map<string, Player[]>()
-  for (const t of world.teams) for (const p of t.players) for (const pos of new Set(p.positions)) {
+  for (const t of world.teams) for (const p of t.players) for (const pos of new Set(includeSecondary ? p.positions : [p.pos])) {
     const key = `${t.id}:${pos}`; if (!index.has(key)) index.set(key, []); index.get(key)!.push(p)
   }
   for (const rows of index.values()) rows.sort((a,b) => b.ovr - a.ovr || b.pot - a.pot || a.id - b.id)
@@ -48,4 +48,27 @@ export function depthRank(index: Map<string, Player[]>, player: Player, pos: str
   // Equal OVR shares first choice; POT never makes an equally rated player a backup.
   return { best: options[0], rank: options.length ? 1 + options.filter(p => p.ovr > player.ovr).length : null }
 }
-export const inSavedXI = (p: Player) => !['SUB','RES','?','—'].includes(p.squadPos)
+export const savedPosition = (p: Player) => POS_SIMPLE[p.squadPos] ?? p.squadPos
+export const inSavedXI = (p: Player) => POS_ORDER.includes(savedPosition(p))
+export interface ClubLineup { valid: boolean; starters: Set<number>; slots: Map<string, number> }
+export function lineupIndex(world: World) {
+  return new Map(world.teams.map(t => {
+    const xi = t.players.filter(inSavedXI), slots = new Map<string,number>()
+    xi.forEach(p => { const pos = savedPosition(p); slots.set(pos, (slots.get(pos) ?? 0) + 1) })
+    return [t.id, { valid: xi.length === 11 && slots.get('GK') === 1, starters: new Set(xi.map(p => p.id)), slots }] as const
+  }))
+}
+export function opportunity(index: Map<string, Player[]>, lineups: Map<number, ClubLineup>, player: Player, pos: string, override = 0) {
+  const options = index.get(`${player.teamId}:${pos}`) ?? [], lineup = lineups.get(player.teamId)
+  const known = !!lineup?.valid
+  // A recorded starter already deployed elsewhere is not blocking this position.
+  const ahead = options.filter(p => p.id !== player.id && p.ovr > player.ovr && !(known && lineup!.starters.has(p.id) && savedPosition(p) !== pos))
+  const slots = override || (known ? lineup!.slots.get(pos) ?? 0 : ['CB','CM','CDM'].includes(pos) ? 2 : 1)
+  const source = override ? 'Manual slot count' : known ? 'Saved XI' : 'Estimated slots'
+  const starter = known && lineup!.starters.has(player.id)
+  const rank = options.some(p => p.id === player.id) ? ahead.length + 1 : null
+  const blocked = rank !== null && slots > 0 && ahead.length >= slots && !starter
+  const status = rank === null ? 'No club hierarchy' : starter ? `Saved starter · ${savedPosition(player)}` : slots === 0 ? `No ${pos} slot in saved XI` : blocked ? 'Outside starting slots' : 'Within starting slots'
+  return { ahead, slots, source, rank, blocked, starter, status }
+}
+

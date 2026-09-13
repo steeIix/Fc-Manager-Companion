@@ -4,7 +4,7 @@ import 'fake-indexeddb/auto'
 import { parseSave } from '../src/parser'
 import { buildWorld } from '../src/model'
 import * as db from '../src/snapshots'
-import { assignXI, depthIndex, depthRank } from '../src/planning'
+import { assignXI, depthIndex, depthRank, opportunity, lineupIndex } from '../src/planning'
 async function main() {
  const root=new URL('../',import.meta.url)
  const json=async(n:string)=>JSON.parse(await readFile(new URL(`public/data/${n}.json`,root),'utf8'))
@@ -20,6 +20,23 @@ async function main() {
  assert.deepEqual(xi.map(p=>p?.id),[2,1])
  assert.equal(assignXI([player(1,90,['CB'])],['CB','CB']).filter(Boolean).length,1)
  assert.equal(depthRank(new Map([['1:ST',[player(1,90,['ST']),player(2,90,['ST'])]]]),{...player(2,90,['ST']),teamId:1},'ST').rank,1)
+ const primary = depthIndex(w), lineup = lineupIndex(w)
+ assert.equal(opportunity(primary,lineup,w.playerById.get(302)!,'CM').blocked,false, 'Second CM fits two estimated starting slots')
+ const buried=opportunity(primary,lineup,w.playerById.get(303)!,'CM')
+ assert.equal(buried.blocked,true); assert.deepEqual(buried.ahead.map(p=>p.id),[301,302])
+ assert.equal(opportunity(primary,lineup,w.playerById.get(401)!,'RM').ahead.length,0,'CAM secondary RM must not block a primary RM')
+ assert.deepEqual(opportunity(depthIndex(w,true),lineup,w.playerById.get(401)!,'RM').ahead.map(p=>p.id),[402])
+ // A complete saved XI supplies exact counts, including three CBs and two CMs.
+ const positions=['GK','CB','CB','CB','LB','RB','CM','CM','LW','RW','ST']
+ const xiPlayers=positions.map((pos,i)=>({...w.playerById.get(301)!,id:500+i,teamId:9,pos,positions:[pos],squadPos:pos,ovr:95-i}))
+ const reserve={...xiPlayers[6],id:599,ovr:70,squadPos:'SUB'}
+ const knownWorld={...w,teams:[{...w.teams[0],id:9,players:[...xiPlayers,reserve]}]}
+ const knownLineup=lineupIndex(knownWorld), knownDepth=depthIndex(knownWorld)
+ assert.equal(opportunity(knownDepth,knownLineup,reserve,'CM').slots,2)
+ assert.equal(opportunity(knownDepth,knownLineup,reserve,'CM').source,'Saved XI')
+ assert.equal(opportunity(knownDepth,knownLineup,xiPlayers[3],'CB').slots,3)
+ assert.equal(opportunity(knownDepth,knownLineup,xiPlayers[7],'CM').blocked,false)
+ assert.equal(opportunity(primary,lineup,w.playerById.get(302)!,'CM',1).blocked,true,'Manual slots change fallback opportunities')
  // Migration: create a v1 DB, then open through v3 and retain all observations.
  const oldSnap=db.fromWorld(w,'CmMgr-first'); delete oldSnap.gameId
  await new Promise<void>((resolve,reject)=>{const r=indexedDB.open('fc26-companion',1);r.onupgradeneeded=()=>r.result.createObjectStore('snapshots',{keyPath:'id'}).put(oldSnap);r.onsuccess=()=>{r.result.close();resolve()};r.onerror=()=>reject(r.error)})

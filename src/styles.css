@@ -139,7 +139,7 @@ h2 { font-family: var(--display); font-weight: 600; font-size: 24px; margin: 26p
   .main { padding: 18px 14px 40px; }
   .club-head .body { grid-template-columns: 1fr; }
   .split { grid-template-columns: 1fr; }
-  .tbl { display: block; overflow-x: auto; }
+
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 
@@ -153,8 +153,8 @@ h2 { font-family: var(--display); font-weight: 600; font-size: 24px; margin: 26p
 @media (max-width: 860px) { .two { grid-template-columns: 1fr; } }
 .tbl td.file { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
 .main { overflow-x: hidden; }
-.tbl { display: block; overflow-x: auto; }
-.tbl thead, .tbl tbody { display: table; width: 100%; }
+
+
 
 /* Career workspaces and planning */
 .games-panel { max-width: 1400px; margin: 0 auto; padding: 32px; }
@@ -193,3 +193,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, circle:focus-vi
 .game-controls { border: 0; padding: 0; margin: 0; min-width: 0; }
 .landing-history { margin: 10px 32px; padding: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
 .landing-history summary { cursor: pointer; font-weight: 600; margin-bottom: 14px; }
+
+.table-container { width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.table-container > .tbl { display: table; width: 100%; border: 0; }
+.two > *, .split > * { min-width: 0; }
+.hierarchy-cell small, .competition-cell small { display: block; font-size: 11px; color: var(--ink-2); margin-top: 4px; }
+.competition-cell { min-width: 210px; max-width: 330px; white-space: normal !important; }
+.competition-cell .text-btn { display: block; margin: 4px 0; }
+.advanced-filters label:has(> input[type=checkbox]) { flex-direction: row; align-items: center; gap: 6px; padding-bottom: 7px; }

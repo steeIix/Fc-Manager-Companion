@@ -1,3 +1,4 @@
+import { Table } from './Table'
 import { useEffect, useMemo, useState } from 'react'
 import { Timeline } from './Features'
 import { fmtMoney, fmtDate, posGroup } from './model'
@@ -25,13 +26,13 @@ export function Snapshots({ currentId, refresh, gameId }: { currentId?: string; 
     <h1>Snapshots</h1>{err && <p className="err">{err}</p>}
     <p className="sub">Every save you open is kept here in your browser. Pick two to see who improved, who declined, and who came and went.</p>
     {list.length === 0 ? <p className="sub">No snapshots yet. Open a save and it will appear here.</p> :
-      <table className="tbl"><thead><tr><th>Snapshot</th><th>In-game date</th><th className="num">Season</th><th>Club</th><th>File</th><th className="num">Players</th><th>Saved</th><th></th></tr></thead><tbody>
+      <Table className="tbl"><thead><tr><th>Snapshot</th><th>In-game date</th><th className="num">Season</th><th>Club</th><th>File</th><th className="num">Players</th><th>Saved</th><th></th></tr></thead><tbody>
         {list.map(m => <tr key={m.id} className={m.id === currentId ? 'user' : ''}>
           <td className="name">{editing === m.id ? <span className="bar" style={{ margin: 0 }}><input type="text" value={label} onChange={e => setLabel(e.target.value)} /><button className="btn" onClick={async () => { try { await renameSnapshot(m.id, label); setEditing(null); reload() } catch (e) { setErr(String(e)) } }}>Save</button></span> : <>{title(m)}{m.id === currentId && <span className="tag">Open now</span>}</>}</td>
           <td>{D(m.asOf)}</td><td className="num">{m.season}</td><td>{m.club || '–'}</td><td className="dim file" title={m.fileName}>{m.fileName}</td><td className="num">{m.playerCount.toLocaleString()}</td><td className="dim">{D(m.savedAt)}</td>
           <td><button className="btn" onClick={() => { setEditing(m.id); setLabel(m.label) }}>Rename</button> <button className="btn" onClick={async () => { if (confirm('Delete this snapshot and its stored save file?')) { try { await deleteSnapshot(m.id); if (a === m.id) setA(''); if (b === m.id) setB(''); reload() } catch (e) { setErr(String(e)) } } }}>Delete</button></td>
         </tr>)}
-      </tbody></table>}
+      </tbody></Table>}
     {list.length >= 2 && <>
       <h2>Compare</h2>
       <div className="bar">
@@ -90,35 +91,35 @@ function Compare({ A, B, pick }: { A: Snapshot; B: Snapshot; pick: (id: number) 
     <div className="bar"><select value={clubId} onChange={e => setClubId(+e.target.value)}>{data.clubs.map(t => <option key={t.id} value={t.id}>{t.n}</option>)}</select>
       <span className="count">{data.left.length} left · {data.joined.length} joined · {data.stayed.length} stayed</span></div>
     <div className="two">
-      <div><h3 className="h3">Left the club</h3>{data.left.length === 0 ? <p className="dim">Nobody left.</p> : <table className="tbl"><thead><tr><th>Player</th><th>Pos</th><th className="num">OVR then</th><th>Now at</th></tr></thead><tbody>
+      <div><h3 className="h3">Left the club</h3>{data.left.length === 0 ? <p className="dim">Nobody left.</p> : <Table className="tbl"><thead><tr><th>Player</th><th>Pos</th><th className="num">OVR then</th><th>Now at</th></tr></thead><tbody>
         {data.left.map(({ p, now }) => <tr key={p.id}><td className="name"><button className="text-btn" onClick={() => pick(p.id)}>{p.n}</button></td><td><Pos p={p.pos} /></td><td className="num"><Rating v={p.ovr} /></td><td>{now ? <>{now.team} <Rating v={now.ovr} /></> : <span className="dim">Retired / not in save</span>}</td></tr>)}
-      </tbody></table>}</div>
-      <div><h3 className="h3">Joined the club</h3>{data.joined.length === 0 ? <p className="dim">No arrivals.</p> : <table className="tbl"><thead><tr><th>Player</th><th>Pos</th><th className="num">Age</th><th className="num">OVR / POT</th><th>From</th></tr></thead><tbody>
+      </tbody></Table>}</div>
+      <div><h3 className="h3">Joined the club</h3>{data.joined.length === 0 ? <p className="dim">No arrivals.</p> : <Table className="tbl"><thead><tr><th>Player</th><th>Pos</th><th className="num">Age</th><th className="num">OVR / POT</th><th>From</th></tr></thead><tbody>
         {data.joined.map(({ p, was }) => <tr key={p.id}><td className="name"><button className="text-btn" onClick={() => pick(p.id)}>{p.n}</button></td><td><Pos p={p.pos} /></td><td className="num">{p.age}</td><td className="num"><Rating v={p.ovr} /> <Rating v={p.pot} /></td><td>{was ? <>{was.team} {was.ovr !== p.ovr && <Delta d={p.ovr - was.ovr} />}</> : <span className="dim">New (youth / generated)</span>}</td></tr>)}
-      </tbody></table>}</div>
+      </tbody></Table>}</div>
     </div>
     <h3 className="h3">Development of players who stayed</h3>
-    <table className="tbl">{head}<tbody>{data.stayed.map(r => <PlayerRow key={r.y.id} r={{ ...r, dp: r.y.pot - r.x.pot, dv: r.y.v - r.x.v }} />)}</tbody></table>
+    <Table className="tbl">{head}<tbody>{data.stayed.map(r => <PlayerRow key={r.y.id} r={{ ...r, dp: r.y.pot - r.x.pot, dv: r.y.v - r.x.v }} />)}</tbody></Table>
 
     <h2>Biggest improvers in the world</h2>
-    <table className="tbl">{head}<tbody>{data.risers.map(r => <PlayerRow key={r.y.id} r={r} />)}</tbody></table>
+    <Table className="tbl">{head}<tbody>{data.risers.map(r => <PlayerRow key={r.y.id} r={r} />)}</tbody></Table>
     <h2>Biggest drop-offs</h2>
-    <table className="tbl">{head}<tbody>{data.fallers.map(r => <PlayerRow key={r.y.id} r={r} />)}</tbody></table>
+    <Table className="tbl">{head}<tbody>{data.fallers.map(r => <PlayerRow key={r.y.id} r={r} />)}</tbody></Table>
     {data.potUp.length > 0 && <><h2>Potential re-rated upwards</h2>
-      <table className="tbl">{head}<tbody>{data.potUp.map(r => <PlayerRow key={r.y.id} r={r} />)}</tbody></table></>}
+      <Table className="tbl">{head}<tbody>{data.potUp.map(r => <PlayerRow key={r.y.id} r={r} />)}</tbody></Table></>}
 
     <div className="two">
-      <div><h2>New faces since {D(X.asOf)}</h2><table className="tbl"><thead><tr><th>Player</th><th>Pos</th><th className="num">Age</th><th>Club</th><th className="num">OVR / POT</th></tr></thead><tbody>
+      <div><h2>New faces since {D(X.asOf)}</h2><Table className="tbl"><thead><tr><th>Player</th><th>Pos</th><th className="num">Age</th><th>Club</th><th className="num">OVR / POT</th></tr></thead><tbody>
         {data.newPlayers.map(p => <tr key={p.id}><td className="name"><button className="text-btn" onClick={() => pick(p.id)}>{p.n}</button></td><td><Pos p={p.pos} /></td><td className="num">{p.age}</td><td>{p.team}</td><td className="num"><Rating v={p.ovr} /> <Rating v={p.pot} /></td></tr>)}
-      </tbody></table></div>
-      <div><h2>No longer in the game</h2><table className="tbl"><thead><tr><th>Player</th><th>Pos</th><th className="num">Age then</th><th>Last club</th><th className="num">OVR then</th></tr></thead><tbody>
+      </tbody></Table></div>
+      <div><h2>No longer in the game</h2><Table className="tbl"><thead><tr><th>Player</th><th>Pos</th><th className="num">Age then</th><th>Last club</th><th className="num">OVR then</th></tr></thead><tbody>
         {data.gone.map(p => <tr key={p.id}><td className="name"><button className="text-btn" onClick={() => pick(p.id)}>{p.n}</button></td><td><Pos p={p.pos} /></td><td className="num">{p.age}</td><td>{p.team}</td><td className="num"><Rating v={p.ovr} /></td></tr>)}
-      </tbody></table></div>
+      </tbody></Table></div>
     </div>
 
     {data.teams.length > 0 && <><h2>Club ratings that moved</h2>
-      <table className="tbl"><thead><tr><th>Club</th><th>League</th><th className="num">Overall</th><th className="num">Δ</th><th className="num">Squad value</th></tr></thead><tbody>
+      <Table className="tbl"><thead><tr><th>Club</th><th>League</th><th className="num">Overall</th><th className="num">Δ</th><th className="num">Squad value</th></tr></thead><tbody>
         {data.teams.slice(0, 15).concat(data.teams.length > 30 ? data.teams.slice(-15) : []).map(r => <tr key={r.t.id}><td className="name">{r.t.n}</td><td className="dim">{r.t.lg}</td><td className="num"><Rating v={r.o!.ovr} /> → <Rating v={r.t.ovr} /></td><td className="num"><Delta d={r.d} /></td><td className="num">{fmtMoney(r.o!.v)} → {fmtMoney(r.t.v)}</td></tr>)}
-      </tbody></table></>}
+      </tbody></Table></>}
   </>
 }

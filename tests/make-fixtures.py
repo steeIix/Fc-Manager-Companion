@@ -13,17 +13,18 @@ def fixture(later=False):
         r['preferredposition1']=pos; r['preferredposition2']=also
         for key in ['acceleration','sprintspeed','finishing','shotpower','shortpassing','dribbling','ballcontrol','strength','stamina','standingtackle','interceptions','defensiveawareness','gkdiving','gkhandling','gkkicking','gkreflexes','gkpositioning']: r[key]=ovr
         return r,dict(playerid=i,teamid=team,position=pos if i!=102 else 28,jerseynumber=i%100),dict(playerid=i,firstname=name,surname='Fixture',commonname='')
-    specs=[(101,'Senior',91,91,25,32,1,-1,2029),(102,'Backup',84 if later else 81,90,25,23,2 if later else 1),(103,'Versatile',85,87,14,27,1,10),(104,'Keeper',86,86,0,31),(105,'Left',82,85,7,25),(106,'Right',83,86,3,25),(107,'CentreA',87,88,5,28),(108,'CentreB',86,89,5,24),(109,'WingA',88,90,27,26),(110,'WingB',87,91,23,24),(111,'Midfield',83,90,14,22),(112,'Youth',58,92,25,16,-1),(113,'AcademyMissing',60,88,14,16,-1),(201,'Rival',93,94,25,27,2)]
+    specs=[(101,'Senior',91,91,25,32,1,-1,2029),(102,'Backup',84 if later else 81,90,25,23,2 if later else 1),(103,'Versatile',85,87,14,27,1,10),(104,'Keeper',86,86,0,31),(105,'Left',82,85,7,25),(106,'Right',83,86,3,25),(107,'CentreA',87,88,5,28),(108,'CentreB',86,89,5,24),(109,'WingA',88,90,27,26),(110,'WingB',87,91,23,24),(111,'Midfield',83,90,14,22),(112,'Youth',58,92,25,16,-1),(113,'AcademyMissing',60,88,14,16,-1),(201,'Rival',93,94,25,27,2),(301,'Neves',93,93,14,25,3),(302,'Vitinha',92,92,14,30,3),(303,'ThirdCM',89,91,14,25,3),(401,'Estevao',88,92,12,23,4),(402,'Palmer',89,90,18,27,4,12)]
     ps=[player(*s) for s in specs]
     teams=[]
-    for i,name in [(1,'Example FC'),(2,'Rival FC')]:
+    for i,name in [(1,'Example FC'),(2,'Rival FC'),(3,'Paris Fixture'),(4,'Chelsea Fixture')]:
         r={v[0]:max(0,v[1]) for v in meta['fields']['teams'].values()}; r.update(teamid=i,teamname=name,overallrating=85,attackrating=87,midfieldrating=84,defenserating=83,clubworth=100000,teamcolor1g=90,teamcolor2r=230,teamcolor3r=80); teams.append(r)
     tables={'players':[p[0] for p in ps if p[0]['playerid']!=113], 'teamplayerlinks':[p[1] for p in ps if p[1]['teamid']>=0], 'editedplayernames':[p[2] for p in ps], 'teams':teams,
       'leagues':[dict(leagueid=1,leaguename='Fixture League',isinternationalleague=0,level=1,iswomencompetition=0)],
-      'leagueteamlinks':[dict(teamid=i,leagueid=1) for i in [1,2]],
+      'leagueteamlinks':[dict(teamid=i,leagueid=1) for i in [1,2,3,4]],
       'career_users':[dict(clubteamid=1,commonname='Test Manager',seasoncount=4,wage=10000)],
       'persistent_events':[dict(eventdate=20291001 if later else 20290101)],
       'career_youthplayers':[dict(playerid=i,monthsinsquad=2,potentialvariance=5,swinglowpotential=-3,playertier=2) for i in [112,113]],
+      'career_managerhistory':[dict(season=1,teamid=1,leagueid=1,tableposition=3,games_played=54,wins=29,draws=10,losses=15,goals_for=109,goals_against=76,points=96,bigbuyplayername='Long transfer name',bigbuyamount=57000000,jobsecurityscore=100),dict(season=1,teamid=2,leagueid=1,tableposition=9,games_played=1,wins=0,draws=1,losses=0,goals_for=1,goals_against=1,points=1,jobsecurityscore=80)],
       'career_scouts':[dict(scoutid=1,firstname='Test',lastname='Scout',experience=4,knowledge=5,regionid=1,state=2)]}
     chunks=[]
     for name,rows in tables.items():
