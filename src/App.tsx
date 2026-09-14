@@ -7,7 +7,8 @@ import { Games, Timeline, Youth, Planner, Shortlist } from './Features'
 import { depthIndex, opportunity, lineupIndex, inSavedXI } from './planning'
 import { ARCHETYPES, GROUP_LABEL, archetypeBlurb, type Group } from './archetypes'
 import { Logo, logosEnabled, setLogosEnabled } from './Logo'
-import { buildWorld, fmtMoney, fmtDate, posGroup, POS_ORDER, POS_GROUPS, matchesPos, ATTR_GROUPS, ATTR_LABEL, type World, type Player, type Team, type League, type Names, type ValueModel } from './model'
+import type { PSnap } from './snapshots'
+import { buildWorld, fmtMoney, fmtDate, posGroup, seasonLabel, POS_ORDER, POS_GROUPS, matchesPos, ATTR_GROUPS, ATTR_LABEL, type World, type Player, type Team, type League, type Names, type ValueModel } from './model'
 
 function useClubTheme(colors?: string[]) {
   useEffect(() => {
@@ -51,9 +52,38 @@ function ClubSwitcher({ world, viewed, go }: { world: World; viewed?: Team; go: 
     <div className="kicker">Active club</div>
     <button className="trigger" onClick={() => setOpen(o => !o)} aria-expanded={open}>{swatch(t, 26)}<span style={{ flex: 1, minWidth: 0 }}><b>{t.name}</b><span className="meta">{t.ovr} OVR · {t.league}</span></span><span style={{ transition: 'transform .2s', transform: open ? 'rotate(180deg)' : 'none' }}>▾</span></button>
     <Collapse open={open}><div className="menu">{options.map(o => <button key={o.id} className={o.id === t.id ? 'on' : ''} onClick={() => { setOpen(false); go(o.id) }}>{swatch(o, 16)}<span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.name}{o.id === world.career.clubId ? ' · yours' : ''}</span><span className="meta">{o.ovr}</span></button>)}</div></Collapse>
-    <div className="meta" style={{ marginTop: 12, lineHeight: 1.5 }}>{world.career.manager} · Season {world.career.season}<br />As of {fmtDate(world.career.asOf)}</div>
+    <div className="meta" style={{ marginTop: 12, lineHeight: 1.5 }}>{world.career.manager} · Season {world.career.season} ({seasonLabel(world.career.season)})<br />As of {fmtDate(world.career.asOf)}</div>
   </div>
 }
+
+// Previous save in the same game, for ▲/▼ deltas.
+type Prev = { map: Map<number, PSnap>; label: string } | null
+const PrevCtx = createContext<Prev>(null)
+function usePrevSnapshot(gameId: string | undefined, currentId: string | undefined, tick: number): Prev {
+  const [prev, setPrev] = useState<Prev>(null)
+  useEffect(() => {
+    let live = true
+    if (!gameId) { setPrev(null); return }
+    allSnapshots(gameId).then(all => {
+      if (!live) return
+      const sorted = all.slice().sort((x, y) => (x.order ?? 0) - (y.order ?? 0))
+      const i = sorted.findIndex(s => s.id === currentId)
+      const p = i > 0 ? sorted[i - 1] : (currentId ? null : sorted[sorted.length - 1])
+      setPrev(p ? { map: new Map(p.players.map(x => [x.id, x])), label: `Save ${p.order ?? '?'}${p.label ? ` · ${p.label}` : ''}` } : null)
+    }).catch(() => setPrev(null))
+    return () => { live = false }
+  }, [gameId, currentId, tick])
+  return prev
+}
+const Delta = ({ now, was, money }: { now: number; was?: number; money?: boolean }) => {
+  if (was == null || was === now) return null
+  const d = now - was, up = d > 0
+  return <span className={'trend ' + (up ? 'up' : 'down')} title={`Was ${money ? fmtMoney(was) : was} in the previous save`}>{up ? '▲' : '▼'}{money ? fmtMoney(Math.abs(d)) : Math.abs(d)}</span>
+}
+const RankTag = ({ p }: { p: Player }) => p.rank ? <span className="ranktag" title={`#${p.rank} of all ${GROUP_WORD[posGroup(p.pos)]} (men/women ranked separately) · #${p.rankLeague} in ${p.league}`}>#{p.rank} <em>{GROUP_ABBR[posGroup(p.pos)]}{p.gender ? ' W' : ''}</em></span> : null
+const GROUP_WORD: Record<string, string> = { GK: 'goalkeepers', DEF: 'defenders', MID: 'midfielders', ATT: 'forwards' }
+const GROUP_ABBR: Record<string, string> = { GK: 'GK', DEF: 'DEF', MID: 'MID', ATT: 'FWD' }
+const ClassTag = ({ p }: { p: Player }) => <span className={'classtag ' + p.classification.tone} title={p.classification.why}>{p.classification.label}</span>
 
 function useTheme() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('fc26-theme') as 'light' | 'dark') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'))
@@ -86,6 +116,7 @@ export default function App() {
   const [err, setErr] = useState('')
   const [snapId, setSnapId] = useState<string>()
   const [snapTick, setSnapTick] = useState(0)
+  const prev = usePrevSnapshot(game?.id, snapId, snapTick)
   const assets = useRef<{ meta: Meta; names: Names; nations: Record<string, string>; vm: ValueModel } | null>(null)
 
   async function ensureAssets() {
@@ -130,7 +161,7 @@ export default function App() {
   </div>
 
   const c = world.career
-  return (
+  return (<PrevCtx.Provider value={prev}>
     <TargetContext.Provider value={{ ids: game?.shortlist ?? [], toggle }}><div className="shell">
       <aside className="rail">
         <div className="brand"><small style={{ marginTop: 0, marginBottom: 6 }}>FC26 Companion</small>Manager Desk<small>{fileName}</small></div>
@@ -157,7 +188,7 @@ export default function App() {
         {view.kind === 'my' && c.club && <MyClub game={game} onGameChange={setGame} world={world} open={() => setView({ kind: 'club', id: c.club!.id })} pick={setSel} />}
       </main>
       {sel && <PlayerModal gameId={game?.id ?? 'legacy'} refresh={snapTick} p={sel} world={world} close={() => setSel(null)} openClub={id => { setSel(null); setView({ kind: 'club', id }) }} />}
-    </div></TargetContext.Provider>
+    </div></TargetContext.Provider></PrevCtx.Provider>
   )
 }
 
@@ -199,6 +230,7 @@ function useSort<T>(rows: T[], init: string, get: (r: T, k: string) => any, init
 }
 
 function LeagueBest({ league, open, pick, world }: { league: League; open: (id: number) => void; pick: (p: Player) => void; world: World }) {
+  const prev = useContext(PrevCtx)
   const [pos, setPos] = useState(''); const [by, setBy] = useState<'ovr' | 'pot' | 'value' | 'growth'>('ovr'); const [n, setN] = useState(25); const [maxAge, setMaxAge] = useState(99)
   const rows = useMemo(() => {
     const all = league.teams.flatMap(t => t.players).filter(p => matchesPos(p, pos) && p.age <= maxAge)
@@ -213,11 +245,11 @@ function LeagueBest({ league, open, pick, world }: { league: League; open: (id: 
       <span className="range">Max age <input type="number" value={maxAge} onChange={e => setMaxAge(+e.target.value || 99)} /></span>
       <div className="seg">{[10, 25, 50, 100].map(k => <button key={k} className={n === k ? 'on' : ''} onClick={() => setN(k)}>Top {k}</button>)}</div>
     </div>
-    <Table className="tbl"><thead><tr><th className="num">#</th><th>Player</th><th>Pos</th><th className="num">Age</th><th>Nation</th><th>Club</th><th className="num">OVR</th><th className="num">POT</th><th className="num">Value</th><th className="num">Contract</th></tr></thead><tbody>
+    <Table className="tbl"><thead><tr><th className="num">#</th><th>Player</th><th>Pos</th><th className="num">Age</th><th>Nation</th><th>Club</th><th className="num">World rank</th><th>Class</th><th className="num">OVR</th><th className="num">POT</th><th className="num">Value</th><th className="num">Contract</th></tr></thead><tbody>
       {rows.map((p, i) => <tr key={p.id} className="click" onClick={() => pick(p)}>
         <td className="num dim">{i + 1}</td><td className="name"><span className={p.known ? '' : 'unk'}>{p.name}</span></td><td><Pos p={p.pos} />{pos && !pos.startsWith('G:') && p.pos !== pos && <span className="dim" style={{ marginLeft: 6, fontSize: 12 }}>also {pos}</span>}</td>
-        <td className="num">{p.age}</td><td>{p.nation}</td><td><a href="#" className="with-crest" onClick={e => { e.preventDefault(); e.stopPropagation(); open(p.teamId) }}>{world.teamById.get(p.teamId) && <Logo team={world.teamById.get(p.teamId)!} size={18} />}{p.team}</a></td>
-        <td className="num"><Rating v={p.ovr} /></td><td className="num"><Rating v={p.pot} /></td><td className="num">{fmtMoney(p.value)}</td><td className="num">{p.contractUntil || '–'}</td>
+        <td className="num">{p.age}</td><td>{p.nation}</td><td><a href="#" className="with-crest" onClick={e => { e.preventDefault(); e.stopPropagation(); open(p.teamId) }}>{world.teamById.get(p.teamId) && <Logo team={world.teamById.get(p.teamId)!} size={18} />}{p.team}</a></td><td className="num"><RankTag p={p} /></td><td><ClassTag p={p} /></td>
+        <td className="num"><Rating v={p.ovr} /><Delta now={p.ovr} was={prev?.map.get(p.id)?.ovr} /></td><td className="num"><Rating v={p.pot} /><Delta now={p.pot} was={prev?.map.get(p.id)?.pot} /></td><td className="num">{fmtMoney(p.value)}</td><td className="num">{p.contractUntil || '–'}</td>
       </tr>)}
     </tbody></Table>
   </>
@@ -264,6 +296,7 @@ function ClubHeader({ t, world }: { t: Team; world: World }) {
 const ordinal = (n: number) => n + (['th', 'st', 'nd', 'rd'][(n % 100 > 10 && n % 100 < 14) ? 0 : Math.min(n % 10, 4) % 4] ?? 'th')
 
 function Roster({ players, world, pick, wages }: { players: Player[]; world: World; pick: (p: Player) => void; wages: boolean }) {
+  const prev = useContext(PrevCtx)
   const [mode, setMode] = useState<'pos' | 'ovr' | 'pot' | 'value' | 'age'>('pos')
   const rows = useMemo(() => {
     const r = players.slice()
@@ -274,16 +307,16 @@ function Roster({ players, world, pick, wages }: { players: Player[]; world: Wor
   let lastGrp = ''
   return <>
     <div className="bar"><span style={{ color: 'var(--ink-2)' }}>Order by</span><div className="seg">{(['pos', 'ovr', 'pot', 'value', 'age'] as const).map(k => <button key={k} className={mode === k ? 'on' : ''} onClick={() => setMode(k)}>{{ pos: 'Position', ovr: 'Overall', pot: 'Potential', value: 'Value', age: 'Age' }[k]}</button>)}</div><span className="count">{players.length} players</span></div>
-    <Table className="tbl"><thead><tr><th className="num">#</th><th>Player</th><th>Pos</th><th>Also</th><th className="num">Age</th><th>Archetype</th><th className="num">OVR</th><th className="num">POT</th><th className="num">Value</th>{wages && <th className="num">Wage / wk</th>}<th className="num">Contract</th><th className="num">Goals</th></tr></thead><tbody>
+    <Table className="tbl"><thead><tr><th className="num">#</th><th>Player</th><th>Pos</th><th>Also</th><th className="num">Age</th><th className="num">Rank</th><th>Class</th><th>Archetype</th><th className="num">OVR</th><th className="num">POT</th><th className="num">Value</th>{wages && <th className="num">Wage / wk</th>}<th className="num">Contract</th><th className="num">Goals</th></tr></thead><tbody>
       {rows.map(p => {
         const g = mode === 'pos' ? posGroup(p.pos) : ''
-        const head = g && g !== lastGrp ? <tr className="grp" key={'g' + g}><td colSpan={wages ? 12 : 11}>{{ GK: 'Goalkeepers', DEF: 'Defenders', MID: 'Midfielders', ATT: 'Forwards' }[g]}</td></tr> : null
+        const head = g && g !== lastGrp ? <tr className="grp" key={'g' + g}><td colSpan={wages ? 14 : 13}>{{ GK: 'Goalkeepers', DEF: 'Defenders', MID: 'Midfielders', ATT: 'Forwards' }[g]}</td></tr> : null
         lastGrp = g
         return <Fragment key={p.id}>{head}<tr className="click" onClick={() => pick(p)}>
           <td className="num dim">{p.jersey || '–'}</td>
           <td className="name"><span className={p.known ? '' : 'unk'}>{p.name}</span>{p.id === world.teamById.get(p.teamId)?.captainId && <span className="tag">C</span>}{p.injury > 0 && <span className="tag inj">Injured</span>}{p.onLoanFrom && <span className="tag loan" title={`From ${p.onLoanFrom} until ${p.loanEnd}`}>Loan record</span>}</td>
-          <td><Pos p={p.pos} /></td><td className="dim">{p.positions.slice(1).join(' ')}</td><td className="num">{p.age}</td><td className="arch-cell" title={p.nation}>{p.archetype.label}</td>
-          <td className="num"><Rating v={p.ovr} /></td><td className="num"><Rating v={p.pot} /></td><td className="num">{fmtMoney(p.value)}</td>
+          <td><Pos p={p.pos} /></td><td className="dim">{p.positions.slice(1).join(' ')}</td><td className="num">{p.age}</td><td className="num"><RankTag p={p} /></td><td><ClassTag p={p} /></td><td className="arch-cell" title={p.nation}>{p.archetype.label}</td>
+          <td className="num"><Rating v={p.ovr} /><Delta now={p.ovr} was={prev?.map.get(p.id)?.ovr} /></td><td className="num"><Rating v={p.pot} /><Delta now={p.pot} was={prev?.map.get(p.id)?.pot} /></td><td className="num">{fmtMoney(p.value)}<Delta now={p.value} was={prev?.map.get(p.id)?.v} money /></td>
           {wages && <td className="num">{p.wage != null ? fmtMoney(p.wage) : '–'}</td>}
           <td className="num">{p.contractUntil || '–'}</td><td className="num dim">{p.leagueGoals}</td>
         </tr></Fragment>
@@ -316,13 +349,13 @@ function MyClub({ world, open, pick, game, onGameChange }: { game: Game | null; 
     {tab === 'youth' ? <Youth world={world} pick={pick} /> : tab === 'planning' ? <Planner world={world} pick={pick} /> : <>
     <div className="split">
       <div className="kpi"><b>{fmtMoney(wageBill)}</b><span>Weekly wage bill across {contracted.length} contracts</span></div>
-      <div className="kpi"><b>{c.manager}</b><span>Manager · season {c.season} · {fmtMoney(c.wage)}/wk</span></div>
+      <div className="kpi"><b>{c.manager}</b><span>Manager · season {c.season} ({seasonLabel(c.season)}) · {fmtMoney(c.wage)}/wk</span></div>
       <div className="kpi"><b>{contracts.length}</b><span>Recorded contract end years</span></div>
     </div>
     {c.history.length > 0 && <>
       <h2>Manager history</h2><p className="sub">This save contains the career’s history from earlier seasons. A zero finishing position means the save has no recorded placement; it is never displayed as 0th. Each history row is not a stored snapshot. The first snapshot you imported can be from a later season.</p>
       <Table className="tbl"><thead><tr><th className="num">Season</th><th>Club</th><th>League</th><th className="num">Pos</th><th className="num">P</th><th className="num">W</th><th className="num">D</th><th className="num">L</th><th className="num">GF</th><th className="num">GA</th><th className="num">Pts</th><th>Biggest signing</th><th>Biggest sale</th><th className="num">Job security</th></tr></thead><tbody>
-        {c.history.map((h, i) => <tr key={`${h.season}-${h.teamid}-${i}`}><td className="num">{h.season as number}</td><td className="name">{world.teamById.get(h.teamid as number)?.name ?? '–'}</td><td className="dim">{world.leagues.find(l => l.id === h.leagueid)?.name ?? '–'}</td><td className="num"><HistoryPosition season={Number(h.season)} team={Number(h.teamid)} league={Number(h.leagueid)} recorded={Number(h.tableposition)} currentSeason={c.season} history={recordedHistory} game={game} onSave={changeFinish} /></td><td className="num">{h.games_played as number}</td><td className="num">{h.wins as number}</td><td className="num">{h.draws as number}</td><td className="num">{h.losses as number}</td><td className="num">{h.goals_for as number}</td><td className="num">{h.goals_against as number}</td><td className="num"><b>{h.points as number}</b></td>
+        {c.history.map((h, i) => <tr key={`${h.season}-${h.teamid}-${i}`}><td className="num">{h.season as number} <span className="dim">{seasonLabel(h.season as number)}</span></td><td className="name">{world.teamById.get(h.teamid as number)?.name ?? '–'}</td><td className="dim">{world.leagues.find(l => l.id === h.leagueid)?.name ?? '–'}</td><td className="num"><HistoryPosition season={Number(h.season)} team={Number(h.teamid)} league={Number(h.leagueid)} recorded={Number(h.tableposition)} currentSeason={c.season} history={recordedHistory} game={game} onSave={changeFinish} /></td><td className="num">{h.games_played as number}</td><td className="num">{h.wins as number}</td><td className="num">{h.draws as number}</td><td className="num">{h.losses as number}</td><td className="num">{h.goals_for as number}</td><td className="num">{h.goals_against as number}</td><td className="num"><b>{h.points as number}</b></td>
           <td>{h.bigbuyplayername ? `${h.bigbuyplayername} (${fmtMoney(h.bigbuyamount as number)})` : '–'}</td><td>{h.bigsellplayername ? `${h.bigsellplayername} (${fmtMoney(h.bigsellamount as number)})` : '–'}</td><td className="num">{h.jobsecurityscore as number}</td></tr>)}
       </tbody></Table>
     </>}
@@ -342,6 +375,7 @@ function MyClub({ world, open, pick, game, onGameChange }: { game: Game | null; 
 const R = ({ v, set }: { v: number[]; set: (v: number[]) => void }) => <><input type="number" value={v[0]} onChange={e => set([+e.target.value, v[1]])} /><span>–</span><input type="number" value={v[1]} onChange={e => set([v[0], +e.target.value])} /></>
 
 function Search({ world, pick, openClub }: { world: World; pick: (p: Player) => void; openClub: (id: number) => void }) {
+  const prev = useContext(PrevCtx)
   const [role, setRole] = useState('all'), [contract, setContract] = useState(''), [foot, setFoot] = useState(''), [minGrowth, setMinGrowth] = useState(''), [minSkill, setMinSkill] = useState(''), [minWeak, setMinWeak] = useState(''), [fit, setFit] = useState(false), [notLoan, setNotLoan] = useState(false)
   const [includeSecondary, setIncludeSecondary] = useState(false), [slotOverride, setSlotOverride] = useState(0), [minAhead, setMinAhead] = useState(0)
   const depth = useMemo(() => depthIndex(world, includeSecondary), [world, includeSecondary])
@@ -392,11 +426,11 @@ function Search({ world, pick, openClub }: { world: World; pick: (p: Player) => 
       <button className="btn" onClick={() => { setQ(''); setG('all'); setPos(''); setOvr([40,99]); setPot([40,99]); setLg(-2); setRole('all'); setContract(''); setFoot(''); setMinGrowth(''); setMinSkill(''); setMinWeak(''); setFit(false); setNotLoan(false); setIncludeSecondary(false); setSlotOverride(0); setMinAhead(0) }}>Reset filters</button>
     </div><p className="note">Primary positions only by default. Slot counts come from the club's saved XI; if none is recorded, pick a slot count. Equal OVR does not count as "ahead".</p></details>
     {!sorted.length && <p className="sub">No players match these filters.</p>}
-    <Table className="tbl"><thead><tr><th>Star</th><Th id="name" label="Player" /><th>Pos</th><Th id="age" label="Age" num /><th>Nation</th><Th id="team" label="Club" /><th>Archetype</th><Th id="ovr" label="OVR" num /><Th id="pot" label="POT" num /><Th id="value" label="Value" num /><Th id="contractUntil" label="Contract" num />{showDepth && <><th>Starting opportunity</th><th>Players ahead at this position</th></>}</tr></thead><tbody>
-      {sorted.slice(page * per, page * per + per).map(p => <tr key={p.id} className="click" onClick={() => pick(p)}>
-        <td><StarButton p={p} /></td><td className="name"><span className={p.known ? '' : 'unk'}>{p.name}</span>{p.onLoanFrom && <span className="tag loan">Loan record</span>}</td><td><Pos p={p.pos} />{p.positions.length > 1 && <span className="dim" style={{ color: 'var(--ink-3)', marginLeft: 6, fontSize: 12 }}>{p.positions.slice(1).join(' ')}</span>}</td>
-        <td className="num">{p.age}</td><td>{p.nation}</td><td>{p.teamId >= 0 ? <a href="#" className="with-crest" onClick={e => { e.preventDefault(); e.stopPropagation(); openClub(p.teamId) }}>{world.teamById.get(p.teamId) && <Logo team={world.teamById.get(p.teamId)!} size={18} />}{p.team}</a> : <span className="dim">Free agent</span>}</td><td className="arch-cell">{p.archetype.label}</td>
-        <td className="num"><Rating v={p.ovr} /></td><td className="num"><Rating v={p.pot} /></td><td className="num">{fmtMoney(p.value)}</td><td className="num">{p.contractUntil || '–'}</td>{showDepth && <><td className="hierarchy-cell">{(() => { const h = opportunities.get(p.id)!; return <><b>{h.status}</b><small>{h.rank !== null ? `#${h.rank} · ${pos || p.pos} · ${h.slots ?? '?'} starting slot${h.slots === 1 ? '' : 's'}` : 'Unassigned'}<br />{h.source}</small></> })()}</td><td className="competition-cell">{(() => { const h = opportunities.get(p.id)!; return h.ahead.length ? <>{h.ahead.map(a => <button key={a.id} className="text-btn" onClick={e => { e.stopPropagation(); pick(a) }}>{a.name} · {a.ovr}<small>{a.pos}{a.pos !== (pos || p.pos) ? ' · secondary option' : ' · primary'}{inSavedXI(a) ? ` · saved: ${a.squadPos}` : ''}</small></button>)}</> : h.rank !== null ? <span className="dim">No higher-rated peers</span> : '—' })()}</td></>}
+    <Table className="tbl"><thead><tr><th className="num">#</th><th aria-label="Shortlist"></th><Th id="name" label="Player" /><th>Pos</th><Th id="age" label="Age" num /><Th id="team" label="Club" /><Th id="rank" label="Rank" num /><th>Class</th><th>Archetype</th><Th id="ovr" label="OVR" num /><Th id="pot" label="POT" num /><Th id="value" label="Value" num /><Th id="contractUntil" label="Contract" num />{showDepth && <><th>Starting opportunity</th><th>Players ahead at this position</th></>}</tr></thead><tbody>
+      {sorted.slice(page * per, page * per + per).map((p, i) => <tr key={p.id} className="click" onClick={() => pick(p)}><td className="num dim">{page * per + i + 1}</td>
+        <td><StarButton p={p} /></td><td className="name"><span className={p.known ? '' : 'unk'}>{p.name}</span>{p.onLoanFrom && <span className="tag loan">Loan</span>}<small className="sub-nation">{p.nation}</small></td><td><Pos p={p.pos} />{p.positions.length > 1 && <span className="dim" style={{ color: 'var(--ink-3)', marginLeft: 6, fontSize: 12 }}>{p.positions.slice(1).join(' ')}</span>}</td>
+        <td className="num">{p.age}</td><td>{p.teamId >= 0 ? <a href="#" className="with-crest" onClick={e => { e.preventDefault(); e.stopPropagation(); openClub(p.teamId) }}>{world.teamById.get(p.teamId) && <Logo team={world.teamById.get(p.teamId)!} size={18} />}{p.team}</a> : <span className="dim">Free agent</span>}</td><td className="num"><RankTag p={p} /></td><td><ClassTag p={p} /></td><td className="arch-cell">{p.archetype.label}</td>
+        <td className="num"><Rating v={p.ovr} /><Delta now={p.ovr} was={prev?.map.get(p.id)?.ovr} /></td><td className="num"><Rating v={p.pot} /><Delta now={p.pot} was={prev?.map.get(p.id)?.pot} /></td><td className="num">{fmtMoney(p.value)}<Delta now={p.value} was={prev?.map.get(p.id)?.v} money /></td><td className="num">{p.contractUntil || '–'}</td>{showDepth && <><td className="hierarchy-cell">{(() => { const h = opportunities.get(p.id)!; return <><b>{h.status}</b><small>{h.rank !== null ? `#${h.rank} · ${pos || p.pos} · ${h.slots ?? '?'} starting slot${h.slots === 1 ? '' : 's'}` : 'Unassigned'}<br />{h.source}</small></> })()}</td><td className="competition-cell">{(() => { const h = opportunities.get(p.id)!; return h.ahead.length ? <>{h.ahead.map(a => <button key={a.id} className="text-btn" onClick={e => { e.stopPropagation(); pick(a) }}>{a.name} · {a.ovr}<small>{a.pos}{a.pos !== (pos || p.pos) ? ' · secondary option' : ' · primary'}{inSavedXI(a) ? ` · saved: ${a.squadPos}` : ''}</small></button>)}</> : h.rank !== null ? <span className="dim">No higher-rated peers</span> : '—' })()}</td></>}
       </tr>)}
     </tbody></Table>
     {pages > 1 && <div className="pager"><button disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</button><span>Page {page + 1} of {pages}</span><button disabled={page >= pages - 1} onClick={() => setPage(page + 1)}>Next</button></div>}
@@ -404,6 +438,7 @@ function Search({ world, pick, openClub }: { world: World; pick: (p: Player) => 
 }
 
 function PlayerModal({ p, world, close, openClub, gameId, refresh }: { gameId: string; refresh: number; p: Player; world: World; close: () => void; openClub: (id: number) => void }) {
+  const prev = useContext(PrevCtx); const was = prev?.map.get(p.id)
   useEffect(() => { const k = (e: KeyboardEvent) => e.key === 'Escape' && close(); window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [close])
   const gk = p.pos === 'GK'
   const face = gk ? p.gk : p.face
@@ -416,8 +451,8 @@ function PlayerModal({ p, world, close, openClub, gameId, refresh }: { gameId: s
         <h1 className={p.known ? '' : 'unk'}><StarButton p={p} />{p.name}</h1>
         <div className="meta" style={{ color: 'var(--ink-2)' }}>{p.teamId >= 0 ? <a href="#" className="with-crest" onClick={e => { e.preventDefault(); openClub(p.teamId) }}>{world.teamById.get(p.teamId) && <Logo team={world.teamById.get(p.teamId)!} size={18} />}{p.team}</a> : 'Free agent'} · {p.league} · {p.nation}{p.nationalTeam ? ` (${p.nationalTeam} squad)` : ''} · {p.gender ? 'Women' : 'Men'}{p.fullName !== p.name ? ` · full name: ${p.fullName}` : ''}{p.onLoanFrom && ` · loan record: ${p.onLoanFrom}, recorded end ${p.loanEnd}`}</div>
         <div className="facts">
-          <div><span>Age</span><b>{p.age} · {p.birth}</b></div><div><span>Positions</span><b>{p.positions.join(', ')}</b></div><div><span>Squad role</span><b>{p.squadPos}{p.jersey ? ` · #${p.jersey}` : ''}</b></div>
-          <div><span>Estimated value</span><b>{fmtMoney(p.value)}</b></div><div><span>Wage</span><b>{p.wage != null ? fmtMoney(p.wage) + ' / wk' : 'Not in save'}</b></div><div><span>Contract until</span><b>{p.contractUntil || '–'}</b></div>
+          <div><span>Standing</span><b><ClassTag p={p} /> {p.rank ? <span className="dim">#{p.rank} {GROUP_ABBR[posGroup(p.pos)]} worldwide · #{p.rankLeague} in league</span> : ''}</b></div><div><span>Age</span><b>{p.age} · {p.birth}</b></div><div><span>Positions</span><b>{p.positions.join(', ')}</b></div><div><span>Squad role</span><b>{p.squadPos}{p.jersey ? ` · #${p.jersey}` : ''}</b></div>
+          <div><span>Estimated value</span><b>{fmtMoney(p.value)} <Delta now={p.value} was={was?.v} money /></b></div>{was && <div><span>Since {prev!.label}</span><b>OVR {was.ovr}→{p.ovr} <Delta now={p.ovr} was={was.ovr} /> · POT {was.pot}→{p.pot} <Delta now={p.pot} was={was.pot} />{was.t !== p.teamId && <> · from {was.team}</>}</b></div>}<div><span>Wage</span><b>{p.wage != null ? fmtMoney(p.wage) + ' / wk' : 'Not in save'}</b></div><div><span>Contract until</span><b>{p.contractUntil || '–'}</b></div>
           <div><span>Foot · skill · weak foot</span><b>{p.foot} · {p.skill}★ · {p.weak}★</b></div><div><span>Height · weight</span><b>{p.height} cm · {p.weight} kg</b></div><div><span>League goals</span><b>{p.leagueGoals}{p.injury > 0 ? ' · currently injured' : ''}</b></div>
         </div>
       </div>

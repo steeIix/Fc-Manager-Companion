@@ -447,3 +447,51 @@ details.adv .note { font-size: 12px; color: var(--ink-3); margin: 8px 0 0; }
 .split .kpi { display: flex; flex-direction: column; justify-content: flex-end; }
 .face div { display: flex; flex-direction: column; justify-content: center; }
 .modal .top { align-items: center; }
+
+/* rankings, classes, trends */
+.ranktag { font-family: var(--display); font-weight: 800; font-size: 13px; white-space: nowrap; }
+.ranktag em { font-style: normal; font-size: 10px; letter-spacing: .08em; color: var(--ink-3); margin-left: 2px; }
+.classtag { display: inline-block; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; font-weight: 800; padding: 2px 6px; border: 1px solid currentColor; white-space: nowrap; }
+.classtag.gold { color: var(--club); background: var(--club-tint); }
+.classtag.green { color: #1f7a48; } [data-theme=dark] .classtag.green { color: #4fc389; }
+.classtag.blue { color: #2d5f8f; } [data-theme=dark] .classtag.blue { color: #7fb4e6; }
+.classtag.grey { color: var(--ink-3); }
+.trend { font-size: 11px; font-weight: 800; margin-left: 5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.trend.up { color: #1f7a48; } .trend.down { color: #c0392b; }
+[data-theme=dark] .trend.up { color: #4fc389; } [data-theme=dark] .trend.down { color: #ff7b6b; }
+
+/* animation refinement: staggered reveals like the mockup */
+.kpis .kpi, .split .kpi, .facts > div, .face > div, .lg-card, .arch-scores .arow, .youth-card, .pitch-slot { animation: fcUp .4s ease-out both; }
+.kpis .kpi:nth-child(1), .split .kpi:nth-child(1), .facts > div:nth-child(1), .face > div:nth-child(1), .lg-card:nth-child(1) { animation-delay: 40ms; }
+.kpis .kpi:nth-child(2), .split .kpi:nth-child(2), .facts > div:nth-child(2), .face > div:nth-child(2), .lg-card:nth-child(2) { animation-delay: 90ms; }
+.kpis .kpi:nth-child(3), .split .kpi:nth-child(3), .facts > div:nth-child(3), .face > div:nth-child(3), .lg-card:nth-child(3) { animation-delay: 140ms; }
+.kpis .kpi:nth-child(4), .split .kpi:nth-child(4), .facts > div:nth-child(4), .face > div:nth-child(4), .lg-card:nth-child(4) { animation-delay: 190ms; }
+.facts > div:nth-child(5), .face > div:nth-child(5), .lg-card:nth-child(5) { animation-delay: 240ms; }
+.facts > div:nth-child(6), .face > div:nth-child(6), .lg-card:nth-child(6) { animation-delay: 290ms; }
+.facts > div:nth-child(n+7), .lg-card:nth-child(n+7) { animation-delay: 340ms; }
+.arow .bar-fg { animation-delay: 120ms; }
+.arow:nth-child(2) .bar-fg { animation-delay: 160ms; } .arow:nth-child(3) .bar-fg { animation-delay: 200ms; } .arow:nth-child(4) .bar-fg { animation-delay: 240ms; }
+.arow:nth-child(5) .bar-fg { animation-delay: 280ms; } .arow:nth-child(6) .bar-fg { animation-delay: 320ms; } .arow:nth-child(n+7) .bar-fg { animation-delay: 360ms; }
+.club-head .ovr { animation: fcPop .4s var(--ease) both; }
+.club-head .club-title { animation: fcUp .4s ease-out both; animation-delay: 60ms; }
+.club-head .stripe i { transform-origin: left; animation: fcGrow .6s var(--ease) both; }
+.club-head .stripe i:nth-child(2) { animation-delay: 80ms; } .club-head .stripe i:nth-child(3) { animation-delay: 160ms; }
+.lg-card { transition: transform .18s var(--ease), border-color .18s, background .18s; }
+.lg-card:hover { transform: translateY(-2px); }
+.tbl tbody tr.click { transition: background .16s, transform .16s; }
+.tbl tbody tr.click:hover .crest { transform: scale(1.12); }
+.crest { transition: transform .18s var(--ease), filter .18s; }
+.rt { transition: transform .16s var(--ease); }
+.tbl tbody tr.click:hover .rt { transform: translateY(-1px); }
+.seg button { transition: background .18s, color .18s; }
+.rail nav button { transition: background .18s, color .18s, padding-left .18s; }
+.rail nav button:hover { padding-left: 26px; }
+@media (prefers-reduced-motion: reduce) { .lg-card:hover, .tbl tbody tr.click:hover .crest, .tbl tbody tr.click:hover .rt { transform: none; } }
+
+/* denser tables so rank/class fit */
+.tbl th, .tbl td { padding: 7px 8px; }
+.tbl td.arch-cell { max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+.classtag { font-size: 9.5px; padding: 2px 5px; letter-spacing: .06em; }
+.tbl td .trend { display: block; margin: 2px 0 0; font-size: 10.5px; line-height: 1; }
+.tbl td.num { white-space: nowrap; }
+.sub-nation { display: block; font-size: 11px; color: var(--ink-3); font-weight: 400; margin-top: 1px; }

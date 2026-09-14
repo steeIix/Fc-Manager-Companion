@@ -84,3 +84,11 @@ Crests are shown in the club header, league tables, rosters, search, the player 
 2. **CDN fallback** — `public/data/logos.json` maps ~480 EA team ids to sofifa's crest images, used when no local file exists.
    This makes requests to `cdn.sofifa.net` from the visitor's browser; turn it off with the "Club crests" checkbox in the sidebar.
 3. **Kit-colour swatch** — always available, drawn from the save.
+
+## Rankings, classifications and trends
+
+- **Rank** — every player's position in their position group (GK / DEF / MID / FWD) across all club leagues in the save, men and women ranked separately (women show a "W" suffix), plus a rank within their league. Ties break on potential, then youth. Icons, free agents and placeholder teams are excluded.
+- **Classification** — a label derived from rank, age, overall and potential, in priority order: Generational Talent, Wonderkid, Elite (top 10), World-Class Veteran (32+ and top 25), World-Class (top 30 or 88+), Rising Star, Evergreen, In His Prime, Top Prospect, Established, Late Bloomer, Prospect, Squad Player, Veteran, Journeyman, Developing. Hover a tag to see why.
+- **Trends** — when the game holds an earlier save, tables show ▲/▼ for overall, potential and value against the previous save, and the profile shows "Since Save N".
+- **Seasons** — careers start in 2026/27, so season labels show the years (Season 3 = 2028/29) in the rail, manager history and snapshots.
+- Placeholder club names are replaced with real ones (Inter, AC Milan, Lazio, Atalanta).
