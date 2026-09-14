@@ -14,25 +14,31 @@ export const teamDisplayName = (id: number, name: string) => TEAM_DISPLAY[id] ??
 /** Careers start in 2026/27, so season N is (2025+N)/(2026+N). */
 export const seasonLabel = (n: number) => `${2025 + n}/${String(2026 + n).slice(2)}`
 
-export interface Classification { label: string; tone: 'gold' | 'green' | 'blue' | 'grey'; why: string }
-export function classify(p: { age: number; ovr: number; pot: number }, rank: number): Classification {
-  const a = p.age, o = p.ovr, t = p.pot, gap = t - o
-  if (a <= 21 && t >= 92) return { label: 'Generational Talent', tone: 'gold', why: `${t} potential at ${a}` }
-  if (a <= 19 && t >= 86) return { label: 'Wonderkid', tone: 'gold', why: `${t} potential at ${a}` }
-  if (rank <= 10 && a <= 31) return { label: 'Elite', tone: 'gold', why: `#${rank} in position group` }
-  if (a >= 32 && rank <= 25) return { label: 'World-Class Veteran', tone: 'gold', why: `#${rank} at ${a}` }
-  if (rank <= 30 || o >= 88) return { label: 'World-Class', tone: 'gold', why: rank <= 30 ? `#${rank} in position group` : `${o} overall` }
-  if (a <= 23 && t >= 84 && gap >= 4) return { label: 'Rising Star', tone: 'green', why: `${o} → ${t} by ${a}` }
-  if (a >= 34 && o >= 80) return { label: 'Evergreen', tone: 'blue', why: `${o} overall at ${a}` }
-  if (a >= 25 && a <= 30 && (o >= 82 || rank <= 100)) return { label: 'In His Prime', tone: 'blue', why: `${o} overall, #${rank}` }
-  if (a <= 22 && t >= 80) return { label: 'Top Prospect', tone: 'green', why: `${t} potential at ${a}` }
-  if (o >= 78) return { label: 'Established', tone: 'blue', why: `${o} overall` }
-  if (a >= 27 && gap >= 3 && o >= 72) return { label: 'Late Bloomer', tone: 'green', why: `still ${gap} to grow at ${a}` }
-  if (a <= 22 && t >= 74) return { label: 'Prospect', tone: 'green', why: `${t} potential` }
-  if (o >= 72) return { label: 'Squad Player', tone: 'grey', why: `${o} overall` }
-  if (a >= 33) return { label: 'Veteran', tone: 'grey', why: `${a} years old` }
-  if (a >= 29) return { label: 'Journeyman', tone: 'grey', why: `${o} overall at ${a}` }
-  return { label: 'Developing', tone: 'grey', why: `${o} → ${t}` }
+export const POS_LONG: Record<string, string> = { GK: 'Goalkeeper', CB: 'Centre-Back', LB: 'Left-Back', RB: 'Right-Back', CDM: 'Defensive Midfielder', CM: 'Central Midfielder', CAM: 'Attacking Midfielder', LM: 'Left Midfielder', RM: 'Right Midfielder', LW: 'Left Winger', RW: 'Right Winger', CF: 'Centre-Forward', ST: 'Striker' }
+export const GROUP_LONG: Record<string, string> = { GK: 'Goalkeeper', DEF: 'Defender', MID: 'Midfielder', ATT: 'Forward' }
+export const GROUP_PLURAL: Record<string, string> = { GK: 'goalkeepers', DEF: 'defenders', MID: 'midfielders', ATT: 'forwards' }
+export const GROUP_SHORT: Record<string, string> = { GK: 'GK', DEF: 'DEF', MID: 'MID', ATT: 'FWD' }
+export type Tone = 'best' | 'great' | 'legend' | 'worldclass' | 'elite' | 'generational' | 'wonderkid' | 'rising' | 'evergreen' | 'prime' | 'topprospect' | 'established' | 'bloomer' | 'prospect' | 'squad' | 'veteran' | 'journeyman' | 'developing'
+export interface Classification { label: string; tone: Tone; why: string }
+/** Rank is the player's world rank within their position group (GK / DEF / MID / FWD), men and women separately. */
+export function classify(p: { age: number; ovr: number; pot: number; pos: string }, rank: number): Classification {
+  const a = p.age, o = p.ovr, t = p.pot, gap = t - o, grp = GROUP_LONG[posGroup(p.pos)] ?? 'Player'
+  if (rank === 1) return a >= 32 ? { label: 'One of the Greats', tone: 'great', why: `#1 ${grp.toLowerCase()} in the world at ${a}` } : { label: `World's Best ${grp}`, tone: 'best', why: `#1 ${grp.toLowerCase()} in the world` }
+  if (rank <= 10) return a >= 32 ? { label: 'World-Class Legend', tone: 'legend', why: `#${rank} ${grp.toLowerCase()} at ${a}` } : { label: 'World-Class', tone: 'worldclass', why: `#${rank} ${grp.toLowerCase()} in the world` }
+  if (rank <= 30) return { label: 'Elite', tone: 'elite', why: `#${rank} ${grp.toLowerCase()} in the world` }
+  if (a <= 21 && t >= 92) return { label: 'Generational Talent', tone: 'generational', why: `${t} potential at ${a}` }
+  if (a <= 19 && t >= 86) return { label: 'Wonderkid', tone: 'wonderkid', why: `${t} potential at ${a}` }
+  if (a <= 23 && t >= 84 && gap >= 4) return { label: 'Rising Star', tone: 'rising', why: `${o} → ${t} by ${a}` }
+  if (a >= 34 && o >= 80) return { label: 'Evergreen', tone: 'evergreen', why: `${o} overall at ${a}` }
+  if (a >= 25 && a <= 30 && (o >= 82 || rank <= 60)) return { label: 'In His Prime', tone: 'prime', why: `${o} overall, #${rank} ${GROUP_SHORT[posGroup(p.pos)]}` }
+  if (a <= 22 && t >= 80) return { label: 'Top Prospect', tone: 'topprospect', why: `${t} potential at ${a}` }
+  if (o >= 78) return { label: 'Established', tone: 'established', why: `${o} overall` }
+  if (a >= 27 && gap >= 3 && o >= 72) return { label: 'Late Bloomer', tone: 'bloomer', why: `still ${gap} to grow at ${a}` }
+  if (a <= 22 && t >= 74) return { label: 'Prospect', tone: 'prospect', why: `${t} potential` }
+  if (o >= 72) return { label: 'Squad Player', tone: 'squad', why: `${o} overall` }
+  if (a >= 33) return { label: 'Veteran', tone: 'veteran', why: `${a} years old` }
+  if (a >= 29) return { label: 'Journeyman', tone: 'journeyman', why: `${o} overall at ${a}` }
+  return { label: 'Developing', tone: 'developing', why: `${o} → ${t}` }
 }
 
 export function posName(code: number) { const p = POS[code] ?? '?'; return POS_SIMPLE[p] ?? p }
@@ -48,7 +54,7 @@ export interface Player {
   contractUntil: number; value: number; wage: number | null; onLoanFrom: string | null; loanEnd: string | null
   face: { PAC: number; SHO: number; PAS: number; DRI: number; DEF: number; PHY: number }
   gk: { DIV: number; HAN: number; KIC: number; REF: number; POS: number; SPD: number }
-  archetype: ArchetypeResult; rank: number; rankLeague: number; classification: Classification; attrs: Record<string, number>; leagueApps: number; leagueGoals: number; form: number
+  archetype: ArchetypeResult; rank: number; rankPos: number; rankLeague: number; classification: Classification; attrs: Record<string, number>; leagueApps: number; leagueGoals: number; form: number
 }
 export interface Team {
   id: number; name: string; gender: number; ovr: number; att: number; mid: number; def: number; worth: number
@@ -199,7 +205,7 @@ export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Reco
       contractUntil: r.contractvaliduntil as number, value: estimateValue(vm, ovr, age, pot, isGK ? 'GK' : posGroup(pos)),
       wage: ct ? (ct.wage as number) : null,
       onLoanFrom: lo ? (teamById.get(lo.teamidloanedfrom as number)?.name ?? 'Unknown club') : null, loanEnd: lo ? fmtDate(lilianToDate(lo.loandateend as number)) : null,
-      face, gk, attrs, archetype: null as unknown as ArchetypeResult, rank: 0, rankLeague: 0, classification: null as unknown as Classification, leagueApps: lk ? (lk.leagueappearances as number) : 0, leagueGoals: lk ? (lk.leaguegoals as number) : 0, form: lk ? (lk.form as number) : 0,
+      face, gk, attrs, archetype: null as unknown as ArchetypeResult, rank: 0, rankPos: 0, rankLeague: 0, classification: null as unknown as Classification, leagueApps: lk ? (lk.leagueappearances as number) : 0, leagueGoals: lk ? (lk.leaguegoals as number) : 0, form: lk ? (lk.form as number) : 0,
     }
     players.push(p); playerById.set(id, p)
     if (team) team.players.push(p)
@@ -208,16 +214,17 @@ export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Reco
   const rawAll = players.map(p => rawScores(p.pos, p.attrs))
   const stats = groupStats(rawAll)
   players.forEach((p, i) => { p.archetype = finalize(rawAll[i].group, rawAll[i].raw, stats, p.attrs, { skill: p.skill, height: p.height, ovr: p.ovr }) })
-  // Rankings within position group (GK/DEF/MID/ATT), per gender, among players at club leagues; then classification.
+  // Rankings: world rank within position group (GK/DEF/MID/FWD), plus rank at the exact position and group rank inside the league; per gender.
   const intl = new Set<number>(); for (const r of t.leagues ?? []) if (intlLeague.has(r.leagueid as number) || !(r.leaguename as string) || /free agent/i.test(r.leaguename as string)) intl.add(r.leagueid as number)
   const better = (a: Player, b: Player) => b.ovr - a.ovr || b.pot - a.pot || a.age - b.age
-  const pools = new Map<string, Player[]>(), leaguePools = new Map<string, Player[]>()
+  const groupPools = new Map<string, Player[]>(), posPools = new Map<string, Player[]>(), leaguePools = new Map<string, Player[]>()
+  const push = (mp: Map<string, Player[]>, k: string, p: Player) => (mp.get(k) ?? mp.set(k, []).get(k)!).push(p)
   for (const p of players) {
     if (intl.has(p.leagueId) || p.teamId < 0 || p.age > 45) continue
-    const k = `${p.gender}:${posGroup(p.pos)}`; (pools.get(k) ?? pools.set(k, []).get(k)!).push(p)
-    const lk = `${p.leagueId}:${posGroup(p.pos)}`; (leaguePools.get(lk) ?? leaguePools.set(lk, []).get(lk)!).push(p)
+    push(groupPools, `${p.gender}:${posGroup(p.pos)}`, p); push(posPools, `${p.gender}:${p.pos}`, p); push(leaguePools, `${p.leagueId}:${posGroup(p.pos)}`, p)
   }
-  for (const arr of pools.values()) arr.sort(better).forEach((p, i) => { p.rank = i + 1 })
+  for (const arr of groupPools.values()) arr.sort(better).forEach((p, i) => { p.rank = i + 1 })
+  for (const arr of posPools.values()) arr.sort(better).forEach((p, i) => { p.rankPos = i + 1 })
   for (const arr of leaguePools.values()) arr.sort(better).forEach((p, i) => { p.rankLeague = i + 1 })
   for (const p of players) p.classification = classify(p, p.rank || 9999)
   for (const tm of teams) {

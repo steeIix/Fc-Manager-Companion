@@ -452,10 +452,6 @@ details.adv .note { font-size: 12px; color: var(--ink-3); margin: 8px 0 0; }
 .ranktag { font-family: var(--display); font-weight: 800; font-size: 13px; white-space: nowrap; }
 .ranktag em { font-style: normal; font-size: 10px; letter-spacing: .08em; color: var(--ink-3); margin-left: 2px; }
 .classtag { display: inline-block; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; font-weight: 800; padding: 2px 6px; border: 1px solid currentColor; white-space: nowrap; }
-.classtag.gold { color: var(--club); background: var(--club-tint); }
-.classtag.green { color: #1f7a48; } [data-theme=dark] .classtag.green { color: #4fc389; }
-.classtag.blue { color: #2d5f8f; } [data-theme=dark] .classtag.blue { color: #7fb4e6; }
-.classtag.grey { color: var(--ink-3); }
 .trend { font-size: 11px; font-weight: 800; margin-left: 5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .trend.up { color: #1f7a48; } .trend.down { color: #c0392b; }
 [data-theme=dark] .trend.up { color: #4fc389; } [data-theme=dark] .trend.down { color: #ff7b6b; }
@@ -495,3 +491,36 @@ details.adv .note { font-size: 12px; color: var(--ink-3); margin: 8px 0 0; }
 .tbl td .trend { display: block; margin: 2px 0 0; font-size: 10.5px; line-height: 1; }
 .tbl td.num { white-space: nowrap; }
 .sub-nation { display: block; font-size: 11px; color: var(--ink-3); font-weight: 400; margin-top: 1px; }
+
+/* classification palette — muted, low-contrast tones */
+.classtag.best { color: #6a4b00; background: #f3e2ad; border-color: #ddc98c; }
+.classtag.great { color: #4c3b73; background: #e3dcf2; border-color: #cbc0e5; }
+.classtag.legend { color: #6d4a22; background: #efe0cd; border-color: #dcc7ac; }
+.classtag.worldclass { color: #7a6420; background: #f6eecc; border-color: #e6d9a8; }
+.classtag.elite { color: #3d4f5c; background: #e4ebf0; border-color: #cdd9e1; }
+.classtag.generational { color: #7a3556; background: #f6e2ec; border-color: #e8cbdb; }
+.classtag.wonderkid { color: #1f5f66; background: #ddeef0; border-color: #c2e0e3; }
+.classtag.rising { color: #2f6b45; background: #e2efe7; border-color: #c8e0d2; }
+.classtag.evergreen { color: #5c6430; background: #ecefdc; border-color: #d9dfc0; }
+.classtag.prime { color: #3a5a7a; background: #e5edf4; border-color: #ccdce8; }
+.classtag.topprospect { color: #3b6b45; background: #e5efe6; border-color: #cde0cf; }
+.classtag.established { color: #4f5a60; background: #e9ecee; border-color: #d6dcdf; }
+.classtag.bloomer { color: #77551f; background: #f2e9d6; border-color: #e2d5b8; }
+.classtag.prospect { color: #46705a; background: #e7efeb; border-color: #d0e0d7; }
+.classtag.squad, .classtag.veteran, .classtag.journeyman, .classtag.developing { color: var(--ink-3); background: transparent; border-color: var(--line); }
+[data-theme=dark] .classtag.best { color: #e7cc84; background: #3a2f11; border-color: #55461c; }
+[data-theme=dark] .classtag.great { color: #c3b4e6; background: #2b2440; border-color: #413663; }
+[data-theme=dark] .classtag.legend { color: #dcb98c; background: #38291a; border-color: #543d27; }
+[data-theme=dark] .classtag.worldclass { color: #ddc978; background: #342d12; border-color: #4d431d; }
+[data-theme=dark] .classtag.elite { color: #a9becb; background: #1d272e; border-color: #2e3c46; }
+[data-theme=dark] .classtag.generational { color: #dfa3bf; background: #38222d; border-color: #543444; }
+[data-theme=dark] .classtag.wonderkid { color: #8fc9cf; background: #172e31; border-color: #244549; }
+[data-theme=dark] .classtag.rising { color: #8ccaa5; background: #162b1f; border-color: #234030; }
+[data-theme=dark] .classtag.evergreen { color: #c2cb85; background: #272b16; border-color: #3c4224; }
+[data-theme=dark] .classtag.prime { color: #9dbcd6; background: #1a2530; border-color: #2a3a49; }
+[data-theme=dark] .classtag.topprospect { color: #94c79c; background: #1a291c; border-color: #2a3f2d; }
+[data-theme=dark] .classtag.established { color: #adb8bd; background: #20262a; border-color: #313a3f; }
+[data-theme=dark] .classtag.bloomer { color: #d6b477; background: #322713; border-color: #4a3a1e; }
+[data-theme=dark] .classtag.prospect { color: #9ac4b0; background: #1a2823; border-color: #2a3d35; }
+.classtag { font-weight: 700; }
+.ranktag .trend { display: inline; margin-left: 4px; font-size: 10.5px; }

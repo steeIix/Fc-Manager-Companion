@@ -87,8 +87,12 @@ Crests are shown in the club header, league tables, rosters, search, the player 
 
 ## Rankings, classifications and trends
 
-- **Rank** — every player's position in their position group (GK / DEF / MID / FWD) across all club leagues in the save, men and women ranked separately (women show a "W" suffix), plus a rank within their league. Ties break on potential, then youth. Icons, free agents and placeholder teams are excluded.
-- **Classification** — a label derived from rank, age, overall and potential, in priority order: Generational Talent, Wonderkid, Elite (top 10), World-Class Veteran (32+ and top 25), World-Class (top 30 or 88+), Rising Star, Evergreen, In His Prime, Top Prospect, Established, Late Bloomer, Prospect, Squad Player, Veteran, Journeyman, Developing. Hover a tag to see why.
-- **Trends** — when the game holds an earlier save, tables show ▲/▼ for overall, potential and value against the previous save, and the profile shows "Since Save N".
-- **Seasons** — careers start in 2026/27, so season labels show the years (Season 3 = 2028/29) in the rail, manager history and snapshots.
+- **Rank** — world rank within the player's position group (GK / DEF / MID / FWD), men and women ranked separately ("W" suffix). Hover for their rank at the exact position and their group rank inside their league. Ties break on potential, then youth; icons, free agents and placeholder teams are excluded.
+- **Classification** — strictly rank-based at the top, each tier with its own muted colour:
+  - `#1` -> **World's Best Goalkeeper / Defender / Midfielder / Forward**, or **One of the Greats** if 32+
+  - `#2-10` -> **World-Class**, or **World-Class Legend** if 32+
+  - `#11-30` -> **Elite**
+  - then talent/age tiers: Generational Talent, Wonderkid, Rising Star, Evergreen, In His Prime, Top Prospect, Established, Late Bloomer, Prospect, Squad Player, Veteran, Journeyman, Developing. Hover a tag for the reason.
+- **Trends** — with an earlier save in the game, arrows show movement in group rank and market value; ratings stay plain. The profile lists the previous OVR/POT/rank and old club.
+- **Seasons** — careers start in 2026/27, so Season 3 = 2028/29 in the rail, manager history and snapshots.
 - Placeholder club names are replaced with real ones (Inter, AC Milan, Lazio, Atalanta).
