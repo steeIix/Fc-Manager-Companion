@@ -87,9 +87,9 @@ Crests are shown in the club header, league tables, rosters, search, the player 
 
 ## Rankings, classifications and trends
 
-- **Rank** — world rank within the player's position group (GK / DEF / MID / FWD), men and women ranked separately ("W" suffix). Hover for their rank at the exact position and their group rank inside their league. Ties break on potential, then youth; icons, free agents and placeholder teams are excluded.
+- **Rank** — world rank within the player's ranking group: Goalkeepers, Defenders, Midfielders, Wingers (LW/RW/LM/RM) and Strikers (ST/CF). Men and women are ranked separately (women carry a "W" suffix) and the search defaults to men. Ties break on potential, then value, so a rating-sorted list always matches the rank order. Hover for the rank at the exact position and the group rank inside their league. Icons, free agents and placeholder teams are excluded.
 - **Classification** — strictly rank-based at the top, each tier with its own muted colour:
-  - `#1` -> **World's Best Goalkeeper / Defender / Midfielder / Forward**, or **One of the Greats** if 32+
+  - `#1` -> **World's Best Goalkeeper / Defender / Midfielder / Winger / Striker**, or **One of the Greats** if 32+
   - `#2-10` -> **World-Class**, or **World-Class Legend** if 32+
   - `#11-30` -> **Elite**
   - then talent/age tiers: Generational Talent, Wonderkid, Rising Star, Evergreen, In His Prime, Top Prospect, Established, Late Bloomer, Prospect, Squad Player, Veteran, Journeyman, Developing. Hover a tag for the reason.

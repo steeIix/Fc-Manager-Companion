@@ -5,9 +5,9 @@ export const POS = ['GK','SW','RWB','RB','RCB','CB','LCB','LB','LWB','RDM','CDM'
 export const POS_SIMPLE: Record<string, string> = { SW:'CB', RCB:'CB', LCB:'CB', LWB:'LB', RWB:'RB', RDM:'CDM', LDM:'CDM', RCM:'CM', LCM:'CM', RAM:'CAM', LAM:'CAM', RF:'CF', LF:'CF', RS:'ST', LS:'ST' }
 export const POS_ORDER = ['GK','CB','LB','RB','CDM','CM','CAM','LM','RM','LW','RW','CF','ST']
 export const posGroup = (p: string) => p === 'GK' ? 'GK' : ['CB','LB','RB','LWB','RWB'].includes(p) ? 'DEF' : ['CDM','CM','CAM','LM','RM'].includes(p) ? 'MID' : 'ATT'
-export const POS_GROUPS: [string, string][] = [['G:GK', 'All goalkeepers'], ['G:DEF', 'All defenders'], ['G:MID', 'All midfielders'], ['G:ATT', 'All forwards']]
+export const POS_GROUPS: [string, string][] = [['G:GK', 'All goalkeepers'], ['G:DEF', 'All defenders'], ['G:MID', 'All midfielders'], ['G:WNG', 'All wingers'], ['G:ST', 'All strikers'], ['G:ATT', 'All forwards']]
 /** Position filter: a specific position (any of the player's positions) or a group ("G:DEF"). */
-export const matchesPos = (p: { pos: string; positions: string[] }, f: string) => !f || (f.startsWith('G:') ? posGroup(p.pos) === f.slice(2) : p.positions.includes(f))
+export const matchesPos = (p: { pos: string; positions: string[] }, f: string) => !f || (f.startsWith('G:') ? (f === 'G:ATT' ? posGroup(p.pos) === 'ATT' : rankGroupOf(p.pos) === f.slice(2)) : p.positions.includes(f))
 // EA ships some clubs under placeholder names; show the real ones.
 export const TEAM_DISPLAY: Record<number, string> = { 131682: 'Inter', 131681: 'AC Milan', 115841: 'Lazio', 115845: 'Atalanta' }
 export const teamDisplayName = (id: number, name: string) => TEAM_DISPLAY[id] ?? name
@@ -15,14 +15,19 @@ export const teamDisplayName = (id: number, name: string) => TEAM_DISPLAY[id] ??
 export const seasonLabel = (n: number) => `${2025 + n}/${String(2026 + n).slice(2)}`
 
 export const POS_LONG: Record<string, string> = { GK: 'Goalkeeper', CB: 'Centre-Back', LB: 'Left-Back', RB: 'Right-Back', CDM: 'Defensive Midfielder', CM: 'Central Midfielder', CAM: 'Attacking Midfielder', LM: 'Left Midfielder', RM: 'Right Midfielder', LW: 'Left Winger', RW: 'Right Winger', CF: 'Centre-Forward', ST: 'Striker' }
-export const GROUP_LONG: Record<string, string> = { GK: 'Goalkeeper', DEF: 'Defender', MID: 'Midfielder', ATT: 'Forward' }
-export const GROUP_PLURAL: Record<string, string> = { GK: 'goalkeepers', DEF: 'defenders', MID: 'midfielders', ATT: 'forwards' }
-export const GROUP_SHORT: Record<string, string> = { GK: 'GK', DEF: 'DEF', MID: 'MID', ATT: 'FWD' }
+/** Ranking groups: wingers and strikers are different kinds of forward, so they are ranked apart. */
+export type RankGroup = 'GK' | 'DEF' | 'MID' | 'WNG' | 'ST'
+export const rankGroupOf = (p: string): RankGroup => p === 'GK' ? 'GK' : ['CB','LB','RB','LWB','RWB'].includes(p) ? 'DEF' : ['CDM','CM','CAM'].includes(p) ? 'MID' : ['LM','RM','LW','RW'].includes(p) ? 'WNG' : 'ST'
+export const GROUP_LONG: Record<string, string> = { GK: 'Goalkeeper', DEF: 'Defender', MID: 'Midfielder', WNG: 'Winger', ST: 'Striker' }
+export const GROUP_PLURAL: Record<string, string> = { GK: 'goalkeepers', DEF: 'defenders', MID: 'midfielders', WNG: 'wingers', ST: 'strikers' }
+export const GROUP_SHORT: Record<string, string> = { GK: 'GK', DEF: 'DEF', MID: 'MID', WNG: 'WNG', ST: 'ST' }
+/** One ordering used for ranks and for rating-sorted lists, so #1 is always listed first. */
+export const rankOrder = (a: { ovr: number; pot: number; value: number; id: number }, b: { ovr: number; pot: number; value: number; id: number }) => b.ovr - a.ovr || b.pot - a.pot || b.value - a.value || a.id - b.id
 export type Tone = 'best' | 'great' | 'legend' | 'worldclass' | 'elite' | 'generational' | 'wonderkid' | 'rising' | 'evergreen' | 'prime' | 'topprospect' | 'established' | 'bloomer' | 'prospect' | 'squad' | 'veteran' | 'journeyman' | 'developing'
 export interface Classification { label: string; tone: Tone; why: string }
 /** Rank is the player's world rank within their position group (GK / DEF / MID / FWD), men and women separately. */
 export function classify(p: { age: number; ovr: number; pot: number; pos: string }, rank: number): Classification {
-  const a = p.age, o = p.ovr, t = p.pot, gap = t - o, grp = GROUP_LONG[posGroup(p.pos)] ?? 'Player'
+  const a = p.age, o = p.ovr, t = p.pot, gap = t - o, grp = GROUP_LONG[rankGroupOf(p.pos)] ?? 'Player'
   if (rank === 1) return a >= 32 ? { label: 'One of the Greats', tone: 'great', why: `#1 ${grp.toLowerCase()} in the world at ${a}` } : { label: `World's Best ${grp}`, tone: 'best', why: `#1 ${grp.toLowerCase()} in the world` }
   if (rank <= 10) return a >= 32 ? { label: 'World-Class Legend', tone: 'legend', why: `#${rank} ${grp.toLowerCase()} at ${a}` } : { label: 'World-Class', tone: 'worldclass', why: `#${rank} ${grp.toLowerCase()} in the world` }
   if (rank <= 30) return { label: 'Elite', tone: 'elite', why: `#${rank} ${grp.toLowerCase()} in the world` }
@@ -30,7 +35,7 @@ export function classify(p: { age: number; ovr: number; pot: number; pos: string
   if (a <= 19 && t >= 86) return { label: 'Wonderkid', tone: 'wonderkid', why: `${t} potential at ${a}` }
   if (a <= 23 && t >= 84 && gap >= 4) return { label: 'Rising Star', tone: 'rising', why: `${o} → ${t} by ${a}` }
   if (a >= 34 && o >= 80) return { label: 'Evergreen', tone: 'evergreen', why: `${o} overall at ${a}` }
-  if (a >= 25 && a <= 30 && (o >= 82 || rank <= 60)) return { label: 'In His Prime', tone: 'prime', why: `${o} overall, #${rank} ${GROUP_SHORT[posGroup(p.pos)]}` }
+  if (a >= 25 && a <= 30 && (o >= 82 || rank <= 60)) return { label: 'In His Prime', tone: 'prime', why: `${o} overall, #${rank} ${GROUP_SHORT[rankGroupOf(p.pos)]}` }
   if (a <= 22 && t >= 80) return { label: 'Top Prospect', tone: 'topprospect', why: `${t} potential at ${a}` }
   if (o >= 78) return { label: 'Established', tone: 'established', why: `${o} overall` }
   if (a >= 27 && gap >= 3 && o >= 72) return { label: 'Late Bloomer', tone: 'bloomer', why: `still ${gap} to grow at ${a}` }
@@ -216,19 +221,19 @@ export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Reco
   players.forEach((p, i) => { p.archetype = finalize(rawAll[i].group, rawAll[i].raw, stats, p.attrs, { skill: p.skill, height: p.height, ovr: p.ovr }) })
   // Rankings: world rank within position group (GK/DEF/MID/FWD), plus rank at the exact position and group rank inside the league; per gender.
   const intl = new Set<number>(); for (const r of t.leagues ?? []) if (intlLeague.has(r.leagueid as number) || !(r.leaguename as string) || /free agent/i.test(r.leaguename as string)) intl.add(r.leagueid as number)
-  const better = (a: Player, b: Player) => b.ovr - a.ovr || b.pot - a.pot || a.age - b.age
+  const better = rankOrder
   const groupPools = new Map<string, Player[]>(), posPools = new Map<string, Player[]>(), leaguePools = new Map<string, Player[]>()
   const push = (mp: Map<string, Player[]>, k: string, p: Player) => (mp.get(k) ?? mp.set(k, []).get(k)!).push(p)
   for (const p of players) {
     if (intl.has(p.leagueId) || p.teamId < 0 || p.age > 45) continue
-    push(groupPools, `${p.gender}:${posGroup(p.pos)}`, p); push(posPools, `${p.gender}:${p.pos}`, p); push(leaguePools, `${p.leagueId}:${posGroup(p.pos)}`, p)
+    push(groupPools, `${p.gender}:${rankGroupOf(p.pos)}`, p); push(posPools, `${p.gender}:${p.pos}`, p); push(leaguePools, `${p.leagueId}:${rankGroupOf(p.pos)}`, p)
   }
   for (const arr of groupPools.values()) arr.sort(better).forEach((p, i) => { p.rank = i + 1 })
   for (const arr of posPools.values()) arr.sort(better).forEach((p, i) => { p.rankPos = i + 1 })
   for (const arr of leaguePools.values()) arr.sort(better).forEach((p, i) => { p.rankLeague = i + 1 })
   for (const p of players) p.classification = classify(p, p.rank || 9999)
   for (const tm of teams) {
-    tm.players.sort((a, b) => POS_ORDER.indexOf(a.pos) - POS_ORDER.indexOf(b.pos) || b.ovr - a.ovr)
+    tm.players.sort((a, b) => POS_ORDER.indexOf(a.pos) - POS_ORDER.indexOf(b.pos) || rankOrder(a, b))
     tm.squadSize = tm.players.length
   }
   const leagues: League[] = []

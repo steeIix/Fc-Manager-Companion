@@ -524,3 +524,6 @@ details.adv .note { font-size: 12px; color: var(--ink-3); margin: 8px 0 0; }
 [data-theme=dark] .classtag.prospect { color: #9ac4b0; background: #1a2823; border-color: #2a3d35; }
 .classtag { font-weight: 700; }
 .ranktag .trend { display: inline; margin-left: 4px; font-size: 10.5px; }
+.facts .standing { grid-column: 1 / -1; }
+.facts .standing b { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.facts .standing .dim { font-weight: 400; font-size: 12px; }

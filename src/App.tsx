@@ -8,7 +8,7 @@ import { depthIndex, opportunity, lineupIndex, inSavedXI } from './planning'
 import { ARCHETYPES, GROUP_LABEL, archetypeBlurb, type Group } from './archetypes'
 import { Logo, logosEnabled, setLogosEnabled } from './Logo'
 import type { PSnap } from './snapshots'
-import { buildWorld, fmtMoney, fmtDate, posGroup, seasonLabel, POS_LONG, GROUP_SHORT, GROUP_PLURAL, GROUP_LONG, POS_ORDER, POS_GROUPS, matchesPos, ATTR_GROUPS, ATTR_LABEL, type World, type Player, type Team, type League, type Names, type ValueModel } from './model'
+import { buildWorld, fmtMoney, fmtDate, posGroup, rankGroupOf, rankOrder, seasonLabel, POS_LONG, GROUP_SHORT, GROUP_PLURAL, GROUP_LONG, POS_ORDER, POS_GROUPS, matchesPos, ATTR_GROUPS, ATTR_LABEL, type World, type Player, type Team, type League, type Names, type ValueModel } from './model'
 
 function useClubTheme(colors?: string[]) {
   useEffect(() => {
@@ -80,7 +80,7 @@ const Delta = ({ now, was, money }: { now: number; was?: number; money?: boolean
   const d = now - was, up = d > 0
   return <span className={'trend ' + (up ? 'up' : 'down')} title={`Was ${money ? fmtMoney(was) : was} in the previous save`}>{up ? '▲' : '▼'}{money ? fmtMoney(Math.abs(d)) : Math.abs(d)}</span>
 }
-const RankTag = ({ p, was }: { p: Player; was?: number }) => p.rank ? <span className="ranktag" title={`#${p.rank} of all ${GROUP_PLURAL[posGroup(p.pos)]} in the world (men and women ranked separately) · #${p.rankPos} ${POS_LONG[p.pos] ?? p.pos} · #${p.rankLeague} in ${p.league}`}>#{p.rank} <em>{GROUP_SHORT[posGroup(p.pos)]}{p.gender ? ' W' : ''}</em>{was != null && was !== p.rank && <span className={'trend ' + (p.rank < was ? 'up' : 'down')} title={`Was #${was} in the previous save`}>{p.rank < was ? '▲' : '▼'}{Math.abs(p.rank - was)}</span>}</span> : null
+const RankTag = ({ p, was }: { p: Player; was?: number }) => p.rank ? <span className="ranktag" title={`#${p.rank} of all ${p.gender ? "women's " : "men's "}${GROUP_PLURAL[rankGroupOf(p.pos)]} in the world · #${p.rankPos} ${POS_LONG[p.pos] ?? p.pos} · #${p.rankLeague} in ${p.league}`}>#{p.rank} <em>{GROUP_SHORT[rankGroupOf(p.pos)]}{p.gender ? ' W' : ''}</em>{was != null && was !== p.rank && <span className={'trend ' + (p.rank < was ? 'up' : 'down')} title={`Was #${was} in the previous save`}>{p.rank < was ? '▲' : '▼'}{Math.abs(p.rank - was)}</span>}</span> : null
 const ClassTag = ({ p }: { p: Player }) => <span className={'classtag ' + p.classification.tone} title={p.classification.why}>{p.classification.label}</span>
 
 function useTheme() {
@@ -220,9 +220,9 @@ function Leagues({ world, open }: { world: World; open: (id: number) => void }) 
   </>
 }
 
-function useSort<T>(rows: T[], init: string, get: (r: T, k: string) => any, initDesc = true) {
+function useSort<T>(rows: T[], init: string, get: (r: T, k: string) => any, initDesc = true, tie?: (a: T, b: T) => number) {
   const [k, setK] = useState(init); const [desc, setDesc] = useState(initDesc)
-  const sorted = useMemo(() => rows.slice().sort((a, b) => { const x = get(a, k), y = get(b, k); const c = typeof x === 'string' ? x.localeCompare(y) : (x ?? 0) - (y ?? 0); return desc ? -c : c }), [rows, k, desc])
+  const sorted = useMemo(() => rows.slice().sort((a, b) => { const x = get(a, k), y = get(b, k); const c = typeof x === 'string' ? x.localeCompare(y) : (x ?? 0) - (y ?? 0); return (desc ? -c : c) || (tie ? tie(a, b) : 0) }), [rows, k, desc])
   const Th = ({ id, label, num }: { id: string; label: string; num?: boolean }) => <th className={'sortable' + (num ? ' num' : '')} onClick={() => { if (k === id) setDesc(!desc); else { setK(id); setDesc(true) } }}>{label}{k === id ? (desc ? ' ▾' : ' ▴') : ''}</th>
   return { sorted, Th }
 }
@@ -232,7 +232,7 @@ function LeagueBest({ league, open, pick, world }: { league: League; open: (id: 
   const [pos, setPos] = useState(''); const [by, setBy] = useState<'ovr' | 'pot' | 'value' | 'growth'>('ovr'); const [n, setN] = useState(25); const [maxAge, setMaxAge] = useState(99)
   const rows = useMemo(() => {
     const all = league.teams.flatMap(t => t.players).filter(p => matchesPos(p, pos) && p.age <= maxAge)
-    all.sort((a, b) => by === 'ovr' ? b.ovr - a.ovr || b.pot - a.pot : by === 'pot' ? b.pot - a.pot || b.ovr - a.ovr : by === 'value' ? b.value - a.value : (b.pot - b.ovr) - (a.pot - a.ovr) || b.pot - a.pot)
+    all.sort((a, b) => by === 'ovr' ? rankOrder(a, b) : by === 'pot' ? b.pot - a.pot || rankOrder(a, b) : by === 'value' ? b.value - a.value : (b.pot - b.ovr) - (a.pot - a.ovr) || b.pot - a.pot)
     return all.slice(0, n)
   }, [league, pos, by, n, maxAge])
   return <>
@@ -298,7 +298,7 @@ function Roster({ players, world, pick, wages }: { players: Player[]; world: Wor
   const [mode, setMode] = useState<'pos' | 'ovr' | 'pot' | 'value' | 'age'>('pos')
   const rows = useMemo(() => {
     const r = players.slice()
-    if (mode === 'ovr') r.sort((a, b) => b.ovr - a.ovr); else if (mode === 'pot') r.sort((a, b) => b.pot - a.pot || b.ovr - a.ovr)
+    if (mode === 'ovr') r.sort(rankOrder); else if (mode === 'pot') r.sort((a, b) => b.pot - a.pot || rankOrder(a, b))
     else if (mode === 'value') r.sort((a, b) => b.value - a.value); else if (mode === 'age') r.sort((a, b) => a.age - b.age || b.ovr - a.ovr)
     return r
   }, [players, mode])
@@ -379,7 +379,7 @@ function Search({ world, pick, openClub }: { world: World; pick: (p: Player) => 
   const depth = useMemo(() => depthIndex(world, includeSecondary), [world, includeSecondary])
   const lineups = useMemo(() => lineupIndex(world), [world])
   const youthIds = useMemo(() => new Set(world.youth.map(y => y.id)), [world])
-  const [q, setQ] = useState(''); const [g, setG] = useState<'all' | 0 | 1>('all'); const [pos, setPos] = useState('')
+  const [q, setQ] = useState(''); const [g, setG] = useState<'all' | 0 | 1>(0); const [pos, setPos] = useState('')
   const [adv, setAdv] = useState(false); const [arch, setArch] = useState(''); const [tag, setTag] = useState(''); const [ovr, setOvr] = useState([40, 99]); const [pot, setPot] = useState([40, 99]); const [age, setAge] = useState([15, 45]); const [lg, setLg] = useState(-2); const [page, setPage] = useState(0)
   const specialLeagues = useMemo(() => new Set(world.leagues.filter(l => l.intl).map(l => l.id)), [world])
   const opportunities = useMemo(() => new Map(world.players.map(p => [p.id, opportunity(depth, lineups, p, pos || p.pos, slotOverride)])), [world, depth, lineups, pos, slotOverride])
@@ -391,7 +391,7 @@ function Search({ world, pick, openClub }: { world: World; pick: (p: Player) => 
   }, [world, q, g, pos, ovr, pot, age, arch, tag, lg, specialLeagues, role, contract, foot, minGrowth, minSkill, minWeak, fit, notLoan, depth, youthIds, opportunities, minAhead, includeSecondary])
   const allTags = useMemo(() => Array.from(new Set(world.players.flatMap(p => p.archetype.tags))).sort(), [world])
   const showDepth = adv || role !== 'all' || minAhead > 0
-  const { sorted, Th } = useSort(rows, 'ovr', (p, k) => (p as any)[k])
+  const { sorted, Th } = useSort(rows, 'ovr', (p, k) => (p as any)[k], true, rankOrder)
   useEffect(() => setPage(0), [rows])
   const per = 100, pages = Math.ceil(sorted.length / per)
   return <>
@@ -399,7 +399,7 @@ function Search({ world, pick, openClub }: { world: World; pick: (p: Player) => 
     <p className="sub">Every player in the save. Search by name, club or nation; narrow by rating, potential, age, position and league. Open the squad-depth filters to find players stuck behind better options.</p>
     <div className="bar">
       <input type="text" placeholder="Name, club or nation" value={q} onChange={e => setQ(e.target.value)} />
-      <div className="seg"><button className={g === 'all' ? 'on' : ''} onClick={() => setG('all')}>All</button><button className={g === 0 ? 'on' : ''} onClick={() => setG(0)}>Men</button><button className={g === 1 ? 'on' : ''} onClick={() => setG(1)}>Women</button></div>
+      <div className="seg"><button className={g === 0 ? 'on' : ''} onClick={() => setG(0)}>Men</button><button className={g === 1 ? 'on' : ''} onClick={() => setG(1)}>Women</button></div>
       <select aria-label="Search position" value={pos} onChange={e => setPos(e.target.value)}><option value="">Any position</option><optgroup label="Groups">{POS_GROUPS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</optgroup><optgroup label="Positions">{POS_ORDER.map(p => <option key={p}>{p}</option>)}</optgroup></select>
       <select value={lg} onChange={e => setLg(+e.target.value)}><option value={-2}>Any club league</option><option value={-1}>Free agents</option>{world.leagues.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select>
     </div>
@@ -449,7 +449,7 @@ function PlayerModal({ p, world, close, openClub, gameId, refresh }: { gameId: s
         <h1 className={p.known ? '' : 'unk'}><StarButton p={p} />{p.name}</h1>
         <div className="meta" style={{ color: 'var(--ink-2)' }}>{p.teamId >= 0 ? <a href="#" className="with-crest" onClick={e => { e.preventDefault(); openClub(p.teamId) }}>{world.teamById.get(p.teamId) && <Logo team={world.teamById.get(p.teamId)!} size={18} />}{p.team}</a> : 'Free agent'} · {p.league} · {p.nation}{p.nationalTeam ? ` (${p.nationalTeam} squad)` : ''} · {p.gender ? 'Women' : 'Men'}{p.fullName !== p.name ? ` · full name: ${p.fullName}` : ''}{p.onLoanFrom && ` · loan record: ${p.onLoanFrom}, recorded end ${p.loanEnd}`}</div>
         <div className="facts">
-          <div><span>Standing</span><b><ClassTag p={p} /> {p.rank ? <span className="dim">#{p.rank} {GROUP_LONG[posGroup(p.pos)].toLowerCase()} in the world{was?.rk != null && was.rk !== p.rank ? <> <span className={'trend ' + (p.rank < was.rk ? 'up' : 'down')}>{p.rank < was.rk ? '▲' : '▼'}{Math.abs(p.rank - was.rk)}</span></> : null} · #{p.rankPos} {POS_LONG[p.pos] ?? p.pos} · #{p.rankLeague} in league</span> : ''}</b></div><div><span>Age</span><b>{p.age} · {p.birth}</b></div><div><span>Positions</span><b>{p.positions.join(', ')}</b></div><div><span>Squad role</span><b>{p.squadPos}{p.jersey ? ` · #${p.jersey}` : ''}</b></div>
+          <div className="standing"><span>Standing</span><b><ClassTag p={p} /> {p.rank ? <span className="dim">#{p.rank} {p.gender ? "women's " : ''}{GROUP_LONG[rankGroupOf(p.pos)].toLowerCase()} in the world{was?.rk != null && was.rk !== p.rank ? <> <span className={'trend ' + (p.rank < was.rk ? 'up' : 'down')}>{p.rank < was.rk ? '▲' : '▼'}{Math.abs(p.rank - was.rk)}</span></> : null} · #{p.rankPos} {POS_LONG[p.pos] ?? p.pos} · #{p.rankLeague} in league</span> : ''}</b></div><div><span>Age</span><b>{p.age} · {p.birth}</b></div><div><span>Positions</span><b>{p.positions.join(', ')}</b></div><div><span>Squad role</span><b>{p.squadPos}{p.jersey ? ` · #${p.jersey}` : ''}</b></div>
           <div><span>Estimated value</span><b>{fmtMoney(p.value)} <Delta now={p.value} was={was?.v} money /></b></div>{was && <div><span>Since {prev!.label}</span><b>OVR {was.ovr}→{p.ovr} · POT {was.pot}→{p.pot}{was.rk ? <> · rank #{was.rk}→#{p.rank}</> : null}{was.t !== p.teamId && <> · from {was.team}</>}</b></div>}<div><span>Wage</span><b>{p.wage != null ? fmtMoney(p.wage) + ' / wk' : 'Not in save'}</b></div><div><span>Contract until</span><b>{p.contractUntil || '–'}</b></div>
           <div><span>Foot · skill · weak foot</span><b>{p.foot} · {p.skill}★ · {p.weak}★</b></div><div><span>Height · weight</span><b>{p.height} cm · {p.weight} kg</b></div><div><span>League goals</span><b>{p.leagueGoals}{p.injury > 0 ? ' · currently injured' : ''}</b></div>
         </div>
