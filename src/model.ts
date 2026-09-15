@@ -116,7 +116,7 @@ export function fmtMoney(v: number | null | undefined) {
 
 const wavg = (r: Row, w: [string, number][]) => Math.round(w.reduce((s, [k, x]) => s + (r[k] as number) * x, 0))
 
-export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Record<string, string>, vm: ValueModel): World {
+export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Record<string, string>, vm: ValueModel, overrides: Record<string, string> = {}): World {
   const dc = new Map<number, string>(); for (const r of t.dcplayernames ?? []) dc.set(r.nameid as number, r.name as string)
   const edited = new Map<number, Row>(); for (const r of t.editedplayernames ?? []) edited.set(r.playerid as number, r)
   const intlLeague = new Set<number>(); for (const r of t.leagues ?? []) if ((r.isinternationalleague as number) === 1 || /international/i.test(r.leaguename as string)) intlLeague.add(r.leagueid as number)
@@ -174,7 +174,8 @@ export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Reco
     let last = ed?.surname as string || dc.get(L) || names.last[L] || ''
     let common = ed?.commonname as string || (C ? dc.get(C) || names.common[C] || '' : '')
     let known = true, name: string, shortName: string
-    if (common) { name = common; shortName = common }
+    if (overrides[String(id)]) { name = shortName = overrides[String(id)]; first = ''; last = ''; common = name }
+    else if (common) { name = common; shortName = common }
     else if (last) { name = (first ? first.split(' ')[0] + ' ' : '') + last; shortName = (first ? first[0] + '. ' : '') + last }
     else if (names.byId[id]) { name = shortName = names.byId[id] }
     else { known = false; name = shortName = `Unknown #${id}` }

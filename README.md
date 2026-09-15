@@ -96,3 +96,7 @@ Crests are shown in the club header, league tables, rosters, search, the player 
 - **Trends** — with an earlier save in the game, arrows show movement in group rank and market value; ratings stay plain. The profile lists the previous OVR/POT/rank and old club.
 - **Seasons** — careers start in 2026/27, so Season 3 = 2028/29 in the rail, manager history and snapshots.
 - Placeholder club names are replaced with real ones (Inter, AC Milan, Lazio, Atalanta).
+
+## Naming unknown players
+
+Players whose name ID isn't in the bundled pool show as *Unknown #id* with a pencil next to the name (in search, rosters, league boards and the profile header). Click it, type the name, done — it applies immediately and is remembered in this browser (`localStorage`), so it carries over to every save you open afterwards. Leave the prompt empty to reset. The profile always shows the pencil, so you can also correct a resolved name.
