@@ -104,3 +104,28 @@ Players whose name ID isn't in the bundled pool show as *Unknown #id* with a pen
 ## Clubs that could use this player
 
 Each player profile has a jump bar under the bio (Archetype / Clubs that could use him / Attributes / History); the clubs section sits directly below the archetype card and sits as a collapsed bar; click it to expand (nothing is computed until then). It lists clubs where he would be an upgrade: for every club of the chosen calibre, the app finds their best option at each of the player's positions and keeps the club when that incumbent is weaker (or the slot is empty). Results are ordered by club rating, since a place at a stronger club matters more than the size of the gap, and show the incumbent's rating and age plus a "younger" flag when the player is at least four years younger. Filters: minimum club stars (5, 4.5, 4 or 3 stars), all leagues or the player's own league, and whether to consider secondary positions. Clicking a row opens that club. Women's and men's clubs are matched separately.
+
+## Time at club
+
+The save stores each player's join date (`playerjointeamdate`), so the profile shows "At club since" with the date and how long that is as of the save's date ("1 yr 11 mo", "Just signed"). Rosters and search show the tenure under the contract year, with the exact date on hover. Loans keep the date of the loan move, which is what the game records.
+
+## Transfers
+
+A dedicated page combining two sources, so nothing is missed:
+
+1. **The game's own news rows** (`persistent_events`, eventid 5) — club-to-club moves with the exact date the game recorded. This is a short rolling window, so it only covers recent transfers, and it never contains edits made outside the game. (eventid 1 in the same table is an international retirement, not a club release, so it is excluded.)
+2. **Squad diffs between the saves in the game** — any player whose club changed between two imported saves. This catches everything, including transfers made in Live Editor, which the game never logs.
+
+Rows are matched between the two: when a squad change lines up with a news row it shows the exact date; otherwise it shows the pair of saves it happened between and is marked "not in game news" — which is what a manual Live Editor move looks like. By default only the newest window is shown, i.e. the changes since the previous save, so transfers you have already reviewed do not pile up with each import; the window selector switches to the whole career or any earlier pair of saves. Club names are tinted with each club's own kit colour (nudged for contrast in light and dark mode) so the two sides of a move read apart. Sort by overall (default), most recent or value; filter by minimum overall, position or group, club (both directions), men/women, and optionally show only moves the game logged. Click a row for the player, or a club name to open it.
+
+## Market finder
+
+Five ready-made searches, each a button at the top of the page:
+
+- **Expiring contracts** — deals ending this season (measured against the save's own date, contracts running to 30 June) at clubs of 4 stars or better; wage shown where the save holds it.
+- **Free agents** — the game keeps these in a "Free Agents League" placeholder club rather than with no club at all, so they are detected by that league and shown as "Free agent".
+- **Hidden gems** — at least +5 potential still to come, 23 or younger, at clubs of 3.5 stars or less.
+- **Value drops** — worth less than in the previous save in this game, sorted by how much they lost. Needs two saves imported.
+- **Blocked talent** — 24 or younger with someone at their own club more than 2 overall better at their position, so they may want out.
+
+All five share filters for men/women, position or group, minimum overall and potential, maximum age, and the club-calibre threshold where it applies. Icons, 5v5 and Look Book placeholder squads are excluded everywhere (flagged on each player as `isSpecial`), and free agents as `isFreeAgent`.

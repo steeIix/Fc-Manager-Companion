@@ -1,7 +1,8 @@
 import type { World } from './model'
 export interface PSnap { id: number; n: string; ovr: number; pot: number; age: number; birth?: string; contract?: number | null; pos: string; t: number; team: string; v: number; g: number; ar?: string; rk?: number }
 export interface TSnap { id: number; n: string; ovr: number; v: number; lg: string }
-export interface Snapshot { order?: number; history?: HistoryFinish[]; id: string; gameId?: string; label: string; fileName: string; savedAt: number; asOf: number; season: number; manager: string; clubId: number; club: string; players: PSnap[]; teams: TSnap[] }
+export interface Snapshot {
+  events?: { p: number; f: number; t: number; d: number; k: string }[]; order?: number; history?: HistoryFinish[]; id: string; gameId?: string; label: string; fileName: string; savedAt: number; asOf: number; season: number; manager: string; clubId: number; club: string; players: PSnap[]; teams: TSnap[] }
 export type SnapMeta = Omit<Snapshot, 'players' | 'teams'> & { playerCount: number }
 export interface HistoryFinish { season: number; team: number; league: number; position: number; completed: boolean }
 export interface Game { historyPositions?: Record<string, number>; id: string; name: string; createdAt: number; shortlist: number[] }
@@ -39,6 +40,7 @@ const tx = <T,>(store: string, mode: IDBTransactionMode, work: (s: IDBObjectStor
 export function fromWorld(w: World, fileName: string, gameId = 'legacy'): Snapshot {
   const c = w.career
   return { id: crypto.randomUUID(), gameId, label: '', fileName, savedAt: Date.now(), asOf: c.asOf.getTime(), season: c.season, manager: c.manager, clubId: c.clubId, club: c.club?.name ?? '',
+    events: w.events.map(e => ({ p: e.playerId, f: e.fromId, t: e.toId, d: e.date, k: e.kind })),
     players: w.players.map(p => ({ id: p.id, n: p.name, ovr: p.ovr, pot: p.pot, age: p.age, birth: p.birth, contract: p.contractUntil || null, pos: p.pos, t: p.teamId, team: p.team, v: p.value, g: p.gender, ar: p.archetype.label, rk: p.rank })),
     history: c.history.map(h => ({ season: Number(h.season), team: Number(h.teamid), league: Number(h.leagueid), position: Number(h.tableposition), completed: Number(h.season) < c.season })),
     teams: w.teams.map(t => ({ id: t.id, n: t.name, ovr: t.ovr, v: t.squadValue, lg: t.league })) }

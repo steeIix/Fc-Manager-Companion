@@ -2,6 +2,8 @@ import { Table } from './Table'
 import React, { Fragment, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { parseSave, isCareerSave, type Meta } from './parser'
 import { Snapshots } from './Snapshots'
+import { Transfers } from './Transfers'
+import { Market } from './Market'
 import { fromWorld, saveWithFile, getSnapshot, getSavedFile, saveSnapshot, allSnapshots, setHistoryPosition, recoverFinish, historyKey, type HistoryFinish, listGames, toggleTarget, type Game } from './snapshots'
 import { Games, Timeline, Youth, Planner, Shortlist } from './Features'
 import { depthIndex, opportunity, lineupIndex, inSavedXI, suitors } from './planning'
@@ -93,7 +95,7 @@ function useTheme() {
 }
 const ThemeButton = ({ t }: { t: { theme: string; toggle: () => void } }) => <button className="theme-btn" onClick={t.toggle} aria-label="Toggle dark mode">{t.theme === 'dark' ? '☀ Light' : '☾ Dark'}</button>
 
-type View = { kind: 'games' } | { kind: 'shortlist' } | { kind: 'snapshots' } | { kind: 'leagues' } | { kind: 'league'; id: number } | { kind: 'club'; id: number } | { kind: 'players' } | { kind: 'my' }
+type View = { kind: 'market' } | { kind: 'transfers' } | { kind: 'games' } | { kind: 'shortlist' } | { kind: 'snapshots' } | { kind: 'leagues' } | { kind: 'league'; id: number } | { kind: 'club'; id: number } | { kind: 'players' } | { kind: 'my' }
 
 const Rating = ({ v }: { v: number }) => <span className={'rt ' + (v >= 85 ? 'r5' : v >= 78 ? 'r4' : v >= 70 ? 'r3' : v >= 60 ? 'r2' : 'r1')}>{v}</span>
 const Pos = ({ p }: { p: string }) => <span className={'pos ' + posGroup(p).toLowerCase()}>{p}</span>
@@ -183,6 +185,8 @@ export default function App() {
           {c.club && <button className={view.kind === 'my' ? 'on' : ''} onClick={() => setView({ kind: 'my' })}>My club</button>}
           <button className={view.kind === 'leagues' || view.kind === 'league' ? 'on' : ''} onClick={() => setView({ kind: 'leagues' })}>Leagues &amp; clubs</button>
           <button className={view.kind === 'players' ? 'on' : ''} onClick={() => setView({ kind: 'players' })}>Player search</button>
+          <button className={view.kind === 'market' ? 'on' : ''} onClick={() => setView({ kind: 'market' })}>Market finder</button>
+          <button className={view.kind === 'transfers' ? 'on' : ''} onClick={() => setView({ kind: 'transfers' })}>Transfers</button>
           <button className={view.kind === 'snapshots' ? 'on' : ''} onClick={() => setView({ kind: 'snapshots' })}>Snapshots &amp; compare</button>
         </nav>
         <div className="foot">{world.players.length.toLocaleString()} players · {world.teams.length} clubs · {world.leagues.length} leagues<br />Values are estimates from the game's rating curve; wages are shown only where the save holds a contract. In-game date is inferred from the latest event in the save.<div style={{ display: 'flex', gap: 8, marginBottom: 12 }}><ThemeButton t={themeCtl} /><button style={{ margin: 0 }} onClick={() => { setWorld(null); setView({ kind: 'leagues' }) }}>New save</button></div><label className="logo-toggle"><input type="checkbox" defaultChecked={logosEnabled()} onChange={e => { setLogosEnabled(e.target.checked); location.reload() }} /> Club crests</label></div>
@@ -195,6 +199,8 @@ export default function App() {
         {view.kind === 'league' && <LeagueView league={world.leagues.find(l => l.id === view.id)!} back={() => setView({ kind: 'leagues' })} open={id => setView({ kind: 'club', id })} userClub={c.clubId} pick={setSel} world={world} />}
         {view.kind === 'club' && <ClubView team={world.teamById.get(view.id)!} world={world} back={() => setView({ kind: 'league', id: world.teamById.get(view.id)!.leagueId })} pick={setSel} />}
         {view.kind === 'players' && <Search world={world} pick={setSel} openClub={id => setView({ kind: 'club', id })} />}
+        {view.kind === 'market' && <Market world={world} prev={prev?.map ?? null} openClub={id => setView({ kind: 'club', id })} pick={setSel} />}
+        {view.kind === 'transfers' && <Transfers world={world} gameId={game?.id} refresh={snapTick} openClub={id => setView({ kind: 'club', id })} pick={id => { const p = world.playerById.get(id); if (p) setSel(p) }} />}
         {view.kind === 'snapshots' && <Snapshots key={game?.id} gameId={game?.id ?? 'legacy'} currentId={snapId} refresh={snapTick} />}
         {view.kind === 'my' && c.club && <MyClub game={game} onGameChange={setGame} world={world} open={() => setView({ kind: 'club', id: c.club!.id })} pick={setSel} />}
       </main>
@@ -329,7 +335,7 @@ function Roster({ players, world, pick, wages }: { players: Player[]; world: Wor
           <td><Pos p={p.pos} /></td><td className="dim">{p.positions.slice(1).join(' ')}</td><td className="num">{p.age}</td><td className="num"><RankTag p={p} was={prev?.map.get(p.id)?.rk} /></td><td><ClassTag p={p} /></td><td className="arch-cell" title={p.nation}>{p.archetype.label}</td>
           <td className="num"><Rating v={p.ovr} /></td><td className="num"><Rating v={p.pot} /></td><td className="num">{fmtMoney(p.value)}<Delta now={p.value} was={prev?.map.get(p.id)?.v} money /></td>
           {wages && <td className="num">{p.wage != null ? fmtMoney(p.wage) : '–'}</td>}
-          <td className="num">{p.contractUntil || '–'}</td><td className="num dim">{p.leagueGoals}</td>
+          <td className="num">{p.contractUntil || '–'}<small className="sub-nation" title={`Joined ${p.joinedLabel}`}>{p.tenure} at club</small></td><td className="num dim">{p.leagueGoals}</td>
         </tr></Fragment>
       })}
     </tbody></Table>
@@ -441,7 +447,7 @@ function Search({ world, pick, openClub }: { world: World; pick: (p: Player) => 
       {sorted.slice(page * per, page * per + per).map((p, i) => <tr key={p.id} className="click" onClick={() => pick(p)}><td className="num dim">{page * per + i + 1}</td>
         <td><StarButton p={p} /></td><td className="name"><span className={p.known ? '' : 'unk'}>{p.name}</span>{!p.known && <Pencil p={p} />}{p.onLoanFrom && <span className="tag loan">Loan</span>}<small className="sub-nation">{p.nation}</small></td><td><Pos p={p.pos} />{p.positions.length > 1 && <span className="dim" style={{ color: 'var(--ink-3)', marginLeft: 6, fontSize: 12 }}>{p.positions.slice(1).join(' ')}</span>}</td>
         <td className="num">{p.age}</td><td>{p.teamId >= 0 ? <a href="#" className="with-crest" onClick={e => { e.preventDefault(); e.stopPropagation(); openClub(p.teamId) }}>{world.teamById.get(p.teamId) && <Logo team={world.teamById.get(p.teamId)!} size={18} />}{p.team}</a> : <span className="dim">Free agent</span>}</td><td className="num"><RankTag p={p} was={prev?.map.get(p.id)?.rk} /></td><td><ClassTag p={p} /></td><td className="arch-cell">{p.archetype.label}</td>
-        <td className="num"><Rating v={p.ovr} /></td><td className="num"><Rating v={p.pot} /></td><td className="num">{fmtMoney(p.value)}<Delta now={p.value} was={prev?.map.get(p.id)?.v} money /></td><td className="num">{p.contractUntil || '–'}</td>{showDepth && <><td className="hierarchy-cell">{(() => { const h = opportunities.get(p.id)!; return <><b>{h.status}</b><small>{h.rank !== null ? `#${h.rank} · ${pos || p.pos} · ${h.slots ?? '?'} starting slot${h.slots === 1 ? '' : 's'}` : 'Unassigned'}<br />{h.source}</small></> })()}</td><td className="competition-cell">{(() => { const h = opportunities.get(p.id)!; return h.ahead.length ? <>{h.ahead.map(a => <button key={a.id} className="text-btn" onClick={e => { e.stopPropagation(); pick(a) }}>{a.name} · {a.ovr}<small>{a.pos}{a.pos !== (pos || p.pos) ? ' · secondary option' : ' · primary'}{inSavedXI(a) ? ` · saved: ${a.squadPos}` : ''}</small></button>)}</> : h.rank !== null ? <span className="dim">No higher-rated peers</span> : '—' })()}</td></>}
+        <td className="num"><Rating v={p.ovr} /></td><td className="num"><Rating v={p.pot} /></td><td className="num">{fmtMoney(p.value)}<Delta now={p.value} was={prev?.map.get(p.id)?.v} money /></td><td className="num">{p.contractUntil || '–'}<small className="sub-nation" title={`Joined ${p.joinedLabel}`}>{p.tenure}</small></td>{showDepth && <><td className="hierarchy-cell">{(() => { const h = opportunities.get(p.id)!; return <><b>{h.status}</b><small>{h.rank !== null ? `#${h.rank} · ${pos || p.pos} · ${h.slots ?? '?'} starting slot${h.slots === 1 ? '' : 's'}` : 'Unassigned'}<br />{h.source}</small></> })()}</td><td className="competition-cell">{(() => { const h = opportunities.get(p.id)!; return h.ahead.length ? <>{h.ahead.map(a => <button key={a.id} className="text-btn" onClick={e => { e.stopPropagation(); pick(a) }}>{a.name} · {a.ovr}<small>{a.pos}{a.pos !== (pos || p.pos) ? ' · secondary option' : ' · primary'}{inSavedXI(a) ? ` · saved: ${a.squadPos}` : ''}</small></button>)}</> : h.rank !== null ? <span className="dim">No higher-rated peers</span> : '—' })()}</td></>}
       </tr>)}
     </tbody></Table>
     {pages > 1 && <div className="pager"><button disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</button><span>Page {page + 1} of {pages}</span><button disabled={page >= pages - 1} onClick={() => setPage(page + 1)}>Next</button></div>}
@@ -496,14 +502,13 @@ function PlayerModal({ p, world, close, openClub, gameId, refresh }: { gameId: s
         <h1 className={p.known ? '' : 'unk'}><Pencil p={p} /><StarButton p={p} />{p.name}</h1>
         <div className="meta" style={{ color: 'var(--ink-2)' }}>{p.teamId >= 0 ? <a href="#" className="with-crest" onClick={e => { e.preventDefault(); openClub(p.teamId) }}>{world.teamById.get(p.teamId) && <Logo team={world.teamById.get(p.teamId)!} size={18} />}{p.team}</a> : 'Free agent'} · {p.league} · {p.nation}{p.nationalTeam ? ` (${p.nationalTeam} squad)` : ''} · {p.gender ? 'Women' : 'Men'}{p.fullName !== p.name ? ` · full name: ${p.fullName}` : ''}{p.onLoanFrom && ` · loan record: ${p.onLoanFrom}, recorded end ${p.loanEnd}`}</div>
         <div className="facts">
-          <div className="standing"><span>Standing</span><b><ClassTag p={p} /> {p.rank ? <span className="dim">#{p.rank} {p.gender ? "women's " : ''}{GROUP_LONG[rankGroupOf(p.pos)].toLowerCase()} in the world{was?.rk != null && was.rk !== p.rank ? <> <span className={'trend ' + (p.rank < was.rk ? 'up' : 'down')}>{p.rank < was.rk ? '▲' : '▼'}{Math.abs(p.rank - was.rk)}</span></> : null} · #{p.rankPos} {POS_LONG[p.pos] ?? p.pos} · #{p.rankLeague} in league</span> : ''}</b></div><div><span>Age</span><b>{p.age} · {p.birth}</b></div><div><span>Positions</span><b>{p.positions.join(', ')}</b></div><div><span>Squad role</span><b>{p.squadPos}{p.jersey ? ` · #${p.jersey}` : ''}</b></div>
+          <div className="standing"><span>Standing</span><b><ClassTag p={p} /> {p.rank ? <span className="dim">#{p.rank} {p.gender ? "women's " : ''}{GROUP_LONG[rankGroupOf(p.pos)].toLowerCase()} in the world{was?.rk != null && was.rk !== p.rank ? <> <span className={'trend ' + (p.rank < was.rk ? 'up' : 'down')}>{p.rank < was.rk ? '▲' : '▼'}{Math.abs(p.rank - was.rk)}</span></> : null} · #{p.rankPos} {POS_LONG[p.pos] ?? p.pos} · #{p.rankLeague} in league</span> : ''}</b></div><div><span>Age</span><b>{p.age} · {p.birth}</b></div><div><span>Positions</span><b>{p.positions.join(', ')}</b></div><div><span>At club since</span><b>{p.joinedLabel} <span className="dim">· {p.tenure}</span></b></div><div><span>Squad role</span><b>{p.squadPos}{p.jersey ? ` · #${p.jersey}` : ''}</b></div>
           <div><span>Estimated value</span><b>{fmtMoney(p.value)} <Delta now={p.value} was={was?.v} money /></b></div>{was && <div><span>Since {prev!.label}</span><b>OVR {was.ovr}→{p.ovr} · POT {was.pot}→{p.pot}{was.rk ? <> · rank #{was.rk}→#{p.rank}</> : null}{was.t !== p.teamId && <> · from {was.team}</>}</b></div>}<div><span>Wage</span><b>{p.wage != null ? fmtMoney(p.wage) + ' / wk' : 'Not in save'}</b></div><div><span>Contract until</span><b>{p.contractUntil || '–'}</b></div>
           <div><span>Foot · skill · weak foot</span><b>{p.foot} · {p.skill}★ · {p.weak}★</b></div><div><span>Height · weight</span><b>{p.height} cm · {p.weight} kg</b></div><div><span>League goals</span><b>{p.leagueGoals}{p.injury > 0 ? ' · currently injured' : ''}</b></div>
         </div>
       </div>
     </div>
 
-    <nav className="jump">{[["Archetype", "arch"], ["Clubs that could use him", "suitors-anchor"], ["Attributes", "attrs"], ["History", "timeline"]].map(([label, id]) => <button key={id} onClick={e => (e.currentTarget.closest('.modal') as HTMLElement).querySelector(`.${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{label}</button>)}</nav>
     <div className="face">{Object.entries(face).map(([k, v]) => <div key={k}><b>{v}</b><span>{k}</span></div>)}</div>
     <div className="arch">
       <div className="arch-main"><span className="arch-kicker">Archetype · {GROUP_LABEL[p.archetype.group]}</span><b>{p.archetype.label}</b><p>{archetypeBlurb(p.archetype.id)}</p>
