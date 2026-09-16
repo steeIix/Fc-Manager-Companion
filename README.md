@@ -100,3 +100,7 @@ Crests are shown in the club header, league tables, rosters, search, the player 
 ## Naming unknown players
 
 Players whose name ID isn't in the bundled pool show as *Unknown #id* with a pencil next to the name (in search, rosters, league boards and the profile header). Click it, type the name, done — it applies immediately and is remembered in this browser (`localStorage`), so it carries over to every save you open afterwards. Leave the prompt empty to reset. The profile always shows the pencil, so you can also correct a resolved name.
+
+## Clubs that could use this player
+
+Each player profile has a jump bar under the bio (Archetype / Clubs that could use him / Attributes / History); the clubs section sits directly below the archetype card and lists clubs where he would be an upgrade: for every club of the chosen calibre, the app finds their best option at each of the player's positions and keeps the club when that incumbent is weaker (or the slot is empty). Results are ordered by club rating, since a place at a stronger club matters more than the size of the gap, and show the incumbent's rating and age plus a "younger" flag when the player is at least four years younger. Filters: minimum club stars (5, 4.5, 4 or 3 stars), all leagues or the player's own league, and whether to consider secondary positions. Clicking a row opens that club. Women's and men's clubs are matched separately.

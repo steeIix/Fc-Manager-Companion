@@ -72,3 +72,28 @@ export function opportunity(index: Map<string, Player[]>, lineups: Map<number, C
   return { ahead, slots, source, rank, blocked, starter, status }
 }
 
+
+/** Clubs where this player would be an upgrade: their best option at the position is weaker, or the slot is empty. */
+export interface Suitor { team: import('./model').Team; incumbent?: Player; gap: number; pos: string; reason: 'empty' | 'upgrade'; ageEdge: boolean }
+export function suitors(world: World, player: Player, opts: { minStars?: number; sameLeagueOnly?: boolean; includeSecondary?: boolean; limit?: number } = {}): Suitor[] {
+  const { minStars = 0, sameLeagueOnly = false, includeSecondary = true, limit = 12 } = opts
+  const positions = includeSecondary ? player.positions : [player.pos]
+  const out: Suitor[] = []
+  for (const t of world.teams) {
+    if (t.id === player.teamId || t.gender !== player.gender || t.leagueId < 0 || !t.players.length) continue
+    if (t.stars < minStars) continue
+    if (sameLeagueOnly && t.leagueId !== player.leagueId) continue
+    let best: { pos: string; incumbent?: Player; gap: number } | null = null
+    for (const pos of positions) {
+      const options = t.players.filter(p => p.positions.includes(pos))
+      const incumbent = options.sort((a, b) => b.ovr - a.ovr || b.pot - a.pot)[0]
+      const gap = incumbent ? player.ovr - incumbent.ovr : 99
+      if (gap <= 0) continue
+      if (!best || gap > best.gap) best = { pos, incumbent, gap }
+    }
+    if (!best) continue
+    out.push({ team: t, incumbent: best.incumbent, gap: best.gap === 99 ? player.ovr : best.gap, pos: best.pos, reason: best.incumbent ? 'upgrade' : 'empty', ageEdge: !!best.incumbent && best.incumbent.age - player.age >= 4 })
+  }
+  // Strongest clubs first — a place at a better club matters more than the size of the upgrade.
+  return out.sort((a, b) => b.team.ovr - a.team.ovr || b.gap - a.gap).slice(0, limit)
+}

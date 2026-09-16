@@ -4,7 +4,7 @@ import { parseSave, isCareerSave, type Meta } from './parser'
 import { Snapshots } from './Snapshots'
 import { fromWorld, saveWithFile, getSnapshot, getSavedFile, saveSnapshot, allSnapshots, setHistoryPosition, recoverFinish, historyKey, type HistoryFinish, listGames, toggleTarget, type Game } from './snapshots'
 import { Games, Timeline, Youth, Planner, Shortlist } from './Features'
-import { depthIndex, opportunity, lineupIndex, inSavedXI } from './planning'
+import { depthIndex, opportunity, lineupIndex, inSavedXI, suitors } from './planning'
 import { ARCHETYPES, GROUP_LABEL, archetypeBlurb, type Group } from './archetypes'
 import { Logo, logosEnabled, setLogosEnabled } from './Logo'
 import type { PSnap } from './snapshots'
@@ -448,6 +448,31 @@ function Search({ world, pick, openClub }: { world: World; pick: (p: Player) => 
   </>
 }
 
+function Suitors({ p, world, openClub }: { p: Player; world: World; openClub: (id: number) => void }) {
+  const [minStars, setMinStars] = useState(4)
+  const [scope, setScope] = useState<'world' | 'league'>('world')
+  const [secondary, setSecondary] = useState(true)
+  const rows = useMemo(() => suitors(world, p, { minStars, sameLeagueOnly: scope === 'league', includeSecondary: secondary }), [world, p, minStars, scope, secondary])
+  return <div className="suitors suitors-anchor">
+    <div className="bar" style={{ margin: '0 0 10px' }}>
+      <span className="arch-kicker" style={{ margin: 0 }}>Clubs that could use {p.shortName}</span>
+      <div className="seg">{[5, 4.5, 4, 3].map(s => <button key={s} className={minStars === s ? 'on' : ''} onClick={() => setMinStars(s)}>{s}★+</button>)}</div>
+      <div className="seg"><button className={scope === 'world' ? 'on' : ''} onClick={() => setScope('world')}>All leagues</button><button className={scope === 'league' ? 'on' : ''} onClick={() => setScope('league')}>Own league</button></div>
+      <label className="chk"><input type="checkbox" checked={secondary} onChange={e => setSecondary(e.target.checked)} /> Include secondary positions</label>
+    </div>
+    {rows.length === 0 ? <p className="dim">No club at this level has a weaker option in {p.positions.join(' / ')} — {p.shortName} would not be an upgrade anywhere in that range.</p> :
+      <Table className="tbl"><thead><tr><th>Club</th><th className="num">OVR</th><th>Stars</th><th>League</th><th>Slot</th><th>Currently</th><th className="num">Upgrade</th></tr></thead><tbody>
+        {rows.map(s => <tr key={s.team.id} className="click" onClick={() => openClub(s.team.id)}>
+          <td className="name"><span className="with-crest"><Logo team={s.team} size={20} />{s.team.name}</span></td>
+          <td className="num"><Rating v={s.team.ovr} /></td><td><Stars n={s.team.stars} /></td><td className="dim">{s.team.league}</td>
+          <td><Pos p={s.pos} /></td>
+          <td>{s.incumbent ? <>{s.incumbent.shortName} <span className="dim">{s.incumbent.ovr} · {s.incumbent.age}y</span></> : <span className="dim">no option</span>}</td>
+          <td className="num"><span className="trend up">+{s.gap}</span>{s.ageEdge && <span className="tag" title="Incumbent is at least four years older">younger</span>}</td>
+        </tr>)}
+      </tbody></Table>}
+  </div>
+}
+
 function PlayerModal({ p, world, close, openClub, gameId, refresh }: { gameId: string; refresh: number; p: Player; world: World; close: () => void; openClub: (id: number) => void }) {
   const prev = useContext(PrevCtx); const was = prev?.map.get(p.id)
   useEffect(() => { const k = (e: KeyboardEvent) => e.key === 'Escape' && close(); window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [close])
@@ -469,12 +494,14 @@ function PlayerModal({ p, world, close, openClub, gameId, refresh }: { gameId: s
       </div>
     </div>
 
+    <nav className="jump">{[["Archetype", "arch"], ["Clubs that could use him", "suitors-anchor"], ["Attributes", "attrs"], ["History", "timeline"]].map(([label, id]) => <button key={id} onClick={e => (e.currentTarget.closest('.modal') as HTMLElement).querySelector(`.${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{label}</button>)}</nav>
     <div className="face">{Object.entries(face).map(([k, v]) => <div key={k}><b>{v}</b><span>{k}</span></div>)}</div>
     <div className="arch">
       <div className="arch-main"><span className="arch-kicker">Archetype · {GROUP_LABEL[p.archetype.group]}</span><b>{p.archetype.label}</b><p>{archetypeBlurb(p.archetype.id)}</p>
         {p.archetype.tags.length > 0 && <div className="tags">{p.archetype.tags.map(t => <span key={t} className="tag style">{t}</span>)}</div>}</div>
       <div className="arch-scores"><span className="arch-kicker">Profile fit {p.archetype.fit}%</span>{p.archetype.scores.map(sc => <div className="arow" key={sc.id}><div>{sc.name}<div className="bar-bg"><div className="bar-fg" style={{ width: `${sc.score}%`, background: sc.id === p.archetype.id ? 'var(--gold)' : 'var(--green)' }} /></div></div><b>{sc.score}</b></div>)}</div>
     </div>
+    <Suitors p={p} world={world} openClub={openClub} />
     <div className="attrs">{groups.map(([name, keys]) => <div key={name}><h3>{name}</h3>{keys.map(k => <div className="arow" key={k}><div>{ATTR_LABEL[k]}<div className="bar-bg"><div className="bar-fg" style={{ width: `${p.attrs[k]}%`, background: p.attrs[k] >= 80 ? 'var(--gold)' : p.attrs[k] >= 65 ? 'var(--green)' : '#8d948f' }} /></div></div><b>{p.attrs[k]}</b></div>)}</div>)}</div>
     <Timeline id={p.id} gameId={gameId} refresh={refresh} />
     {!p.known && <p className="sub" style={{ marginTop: 16 }}>This player's name ID isn't in the bundled name pool. Player ID {p.id}. Click the pencil to set a name; it's remembered in this browser{world.career.club ? '' : ''}.</p>}
