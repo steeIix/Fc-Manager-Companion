@@ -113,7 +113,7 @@ The save stores each player's join date (`playerjointeamdate`), so the profile s
 
 A dedicated page combining two sources, so nothing is missed:
 
-1. **The game's own news rows** (`persistent_events`, eventid 5) — club-to-club moves with the exact date the game recorded. This is a short rolling window, so it only covers recent transfers, and it never contains edits made outside the game. (eventid 1 in the same table is an international retirement, not a club release, so it is excluded.)
+1. **The game's own news rows** (`persistent_events`, eventid 5) — club-to-club moves with the exact date the game recorded. In these rows `team1id` is the club left and `team2id` the club joined, verified by checking the destination against where each player actually sits in the save. This is a short rolling window, so it only covers recent transfers, and it never contains edits made outside the game. (eventid 1 in the same table is an international retirement, not a club release, so it is excluded.)
 2. **Squad diffs between the saves in the game** — any player whose club changed between two imported saves. This catches everything, including transfers made in Live Editor, which the game never logs.
 
 Rows are matched between the two: when a squad change lines up with a news row it shows the exact date; otherwise it shows the pair of saves it happened between and is marked "not in game news" — which is what a manual Live Editor move looks like. By default only the newest window is shown, i.e. the changes since the previous save, so transfers you have already reviewed do not pile up with each import; the window selector switches to the whole career or any earlier pair of saves. Club names are tinted with each club's own kit colour (nudged for contrast in light and dark mode) so the two sides of a move read apart. Sort by overall (default), most recent or value; filter by minimum overall, position or group, club (both directions), men/women, and optionally show only moves the game logged. Click a row for the player, or a club name to open it.
@@ -126,6 +126,10 @@ Five ready-made searches, each a button at the top of the page:
 - **Free agents** — the game keeps these in a "Free Agents League" placeholder club rather than with no club at all, so they are detected by that league and shown as "Free agent".
 - **Hidden gems** — at least +5 potential still to come, 23 or younger, at clubs of 3.5 stars or less.
 - **Value drops** — worth less than in the previous save in this game, sorted by how much they lost. Needs two saves imported.
-- **Blocked talent** — 24 or younger with someone at their own club more than 2 overall better at their position, so they may want out.
+- **Blocked talent** — 24 or younger with someone at their own club more than 2 overall better at the same *primary* position, so they may want out. Primary is compared to primary throughout: a better winger who happens to list the position as a secondary is not treated as blocking anyone.
 
 All five share filters for men/women, position or group, minimum overall and potential, maximum age, and the club-calibre threshold where it applies. Icons, 5v5 and Look Book placeholder squads are excluded everywhere (flagged on each player as `isSpecial`), and free agents as `isFreeAgent`.
+
+## Youth academy players
+
+Your scouted academy players are stored like normal players but sit in a club named "Youth Squad [DO NOT USE]" in a "Youth Squad League". They are flagged as `isYouth` (by that club, that league, or membership of `career_youthplayers`) and kept out of the market finder, player search, transfers and the world rankings — they aren't signable and would otherwise appear as free transfers or hidden gems. They remain visible where they belong: the Youth tab on your club page.

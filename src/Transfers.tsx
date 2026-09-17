@@ -108,7 +108,7 @@ export function Transfers({ world, gameId, refresh, openClub, pick }: { world: W
   const latestKey = windows[0]?.key
   const rows = useMemo(() => {
     const wantWin = win === 'latest' ? latestKey : win
-    const r = moves.filter(m => m.ovr >= minOvr && m.gender === gender && matchesPos({ pos: m.pos, positions: [m.pos] }, pos)
+    const r = moves.filter(m => !world.playerById.get(m.playerId)?.isYouth && m.ovr >= minOvr && m.gender === gender && matchesPos({ pos: m.pos, positions: [m.pos] }, pos)
       && (club === -2 || m.fromId === club || m.toId === club) && (!onlyConfirmed || m.confirmed)
       && (win === 'all' || !wantWin || m.windowKey === wantWin || (m.windowKey === 'news' && win === 'latest')))
     r.sort((a, b) => sort === 'ovr' ? b.ovr - a.ovr || b.pot - a.pot : sort === 'value' ? b.value - a.value : (b.date ?? 0) - (a.date ?? 0) || b.ovr - a.ovr)

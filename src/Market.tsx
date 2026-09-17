@@ -25,7 +25,7 @@ export function Market({ world, prev, openClub, pick }: { world: World; prev: Ma
   const season = world.career.asOf.getUTCFullYear() + (world.career.asOf.getUTCMonth() >= 6 ? 1 : 0) // contracts run to 30 June
 
   const rows = useMemo(() => {
-    const base = world.players.filter(p => p.gender === gender && !p.isSpecial && matchesPos(p, pos) && p.age <= maxAge && p.ovr >= minOvr && p.pot >= minPot)
+    const base = world.players.filter(p => p.gender === gender && !p.isSpecial && !p.isYouth && matchesPos(p, pos) && p.age <= maxAge && p.ovr >= minOvr && p.pot >= minPot)
     const byClubStars = (p: Player) => world.teamById.get(p.teamId)?.stars ?? 0
     switch (lens) {
       case 'expiring': {
@@ -46,7 +46,8 @@ export function Market({ world, prev, openClub, pick }: { world: World; prev: Ma
           if (p.isFreeAgent || p.age > Math.min(maxAge, 24)) return false
           const team = world.teamById.get(p.teamId)
           if (!team) return false
-          return team.players.some(q => q.id !== p.id && q.positions.includes(p.pos) && q.ovr > p.ovr + 2)
+          // Compare primary position to primary position only — a better winger who can also play there is not blocking him.
+          return team.players.some(q => q.id !== p.id && q.pos === p.pos && q.ovr > p.ovr + 2)
         }).sort((a, b) => b.pot - a.pot || rankOrder(a, b))
       }
     }
@@ -83,7 +84,7 @@ export function Market({ world, prev, openClub, pick }: { world: World; prev: Ma
         {rows.slice(0, 200).map((p, i) => {
           const team = world.teamById.get(p.teamId)
           const was = prev?.get(p.id)
-          const blocker = lens === 'stuck' ? team?.players.filter(q => q.id !== p.id && q.positions.includes(p.pos)).sort((a, b) => b.ovr - a.ovr)[0] : undefined
+          const blocker = lens === 'stuck' ? team?.players.filter(q => q.id !== p.id && q.pos === p.pos).sort((a, b) => b.ovr - a.ovr)[0] : undefined
           return <tr key={p.id} className="click" onClick={() => pick(p)}>
             <td className="num dim">{i + 1}</td>
             <td className="name"><span className={p.known ? '' : 'unk'}>{p.name}</span>{p.onLoanFrom && <span className="tag loan">Loan</span>}</td>

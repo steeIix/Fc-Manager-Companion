@@ -52,7 +52,7 @@ export type Names = { first: Record<string, string>; last: Record<string, string
 export type ValueModel = { ovrMin: number; ovr: number[]; ageMin: number; age: number[]; grp: number[]; k: number[] }
 
 export interface Player {
-  isFreeAgent: boolean; isSpecial: boolean   // free-agent pool; icons / 5v5 / Look Book placeholder squads
+  isFreeAgent: boolean; isSpecial: boolean; isYouth: boolean   // free-agent pool; icons / 5v5 / Look Book placeholders; academy squads
   id: number; name: string; fullName: string; shortName: string; known: boolean; gender: number
   ovr: number; pot: number; age: number; birth: string; nationality: number; nation: string
   pos: string; positions: string[]; foot: string; skill: number; weak: number; height: number; weight: number
@@ -222,7 +222,7 @@ export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Reco
       contractUntil: r.contractvaliduntil as number, value: estimateValue(vm, ovr, age, pot, isGK ? 'GK' : posGroup(pos)),
       wage: ct ? (ct.wage as number) : null,
       onLoanFrom: lo ? (teamById.get(lo.teamidloanedfrom as number)?.name ?? 'Unknown club') : null, loanEnd: lo ? fmtDate(lilianToDate(lo.loandateend as number)) : null,
-      isFreeAgent: false, isSpecial: false, face, gk, attrs, archetype: null as unknown as ArchetypeResult, rank: 0, rankPos: 0, rankLeague: 0, classification: null as unknown as Classification, leagueApps: lk ? (lk.leagueappearances as number) : 0, leagueGoals: lk ? (lk.leaguegoals as number) : 0, form: lk ? (lk.form as number) : 0,
+      isFreeAgent: false, isSpecial: false, isYouth: false, face, gk, attrs, archetype: null as unknown as ArchetypeResult, rank: 0, rankPos: 0, rankLeague: 0, classification: null as unknown as Classification, leagueApps: lk ? (lk.leagueappearances as number) : 0, leagueGoals: lk ? (lk.leaguegoals as number) : 0, form: lk ? (lk.form as number) : 0,
     }
     players.push(p); playerById.set(id, p)
     if (team) team.players.push(p)
@@ -232,16 +232,21 @@ export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Reco
   const stats = groupStats(rawAll)
   players.forEach((p, i) => { p.archetype = finalize(rawAll[i].group, rawAll[i].raw, stats, p.attrs, { skill: p.skill, height: p.height, ovr: p.ovr }) })
   // Free-agent pool and placeholder squads (icons, 5v5, Look Book) are not a real market or ranking pool.
-  const freeAgentLeagues = new Set<number>(), specialLeagues = new Set<number>()
+  const freeAgentLeagues = new Set<number>(), specialLeagues = new Set<number>(), youthLeagues = new Set<number>()
   for (const r of t.leagues ?? []) {
     const nm = (r.leaguename as string) || ''
     if (/free agent/i.test(nm)) freeAgentLeagues.add(r.leagueid as number)
+    else if (/youth/i.test(nm)) youthLeagues.add(r.leagueid as number)
     else if (!nm) specialLeagues.add(r.leagueid as number)
   }
+  // Academy players live in a "Youth Squad [DO NOT USE]" club; they are not on the market.
+  const academyIds = new Set<number>((t.career_youthplayers ?? []).map(r => r.playerid as number))
   for (const p of players) {
     p.isFreeAgent = p.teamId < 0 || freeAgentLeagues.has(p.leagueId)
     p.isSpecial = specialLeagues.has(p.leagueId)
-    if (p.isFreeAgent) { p.team = 'Free agent'; p.league = 'Free agents' }
+    p.isYouth = academyIds.has(p.id) || youthLeagues.has(p.leagueId) || /youth squad|do not use/i.test(p.team)
+    if (p.isYouth) { p.team = 'Youth academy'; p.league = 'Youth academy' }
+    else if (p.isFreeAgent) { p.team = 'Free agent'; p.league = 'Free agents' }
   }
 
   // Rankings: world rank within position group (GK/DEF/MID/FWD), plus rank at the exact position and group rank inside the league; per gender.
@@ -250,7 +255,7 @@ export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Reco
   const groupPools = new Map<string, Player[]>(), posPools = new Map<string, Player[]>(), leaguePools = new Map<string, Player[]>()
   const push = (mp: Map<string, Player[]>, k: string, p: Player) => (mp.get(k) ?? mp.set(k, []).get(k)!).push(p)
   for (const p of players) {
-    if (intl.has(p.leagueId) || p.isFreeAgent || p.isSpecial || p.teamId < 0 || p.age > 45) continue
+    if (intl.has(p.leagueId) || p.isFreeAgent || p.isSpecial || p.isYouth || p.teamId < 0 || p.age > 45) continue
     push(groupPools, `${p.gender}:${rankGroupOf(p.pos)}`, p); push(posPools, `${p.gender}:${p.pos}`, p); push(leaguePools, `${p.leagueId}:${rankGroupOf(p.pos)}`, p)
   }
   for (const arr of groupPools.values()) arr.sort(better).forEach((p, i) => { p.rank = i + 1 })
@@ -289,10 +294,11 @@ export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Reco
     tm.squadValue = tm.players.reduce((s, p) => s + p.value, 0)
   }
   for (const y of youth) if (y.player) { y.player.team = `${club?.name ?? 'My club'} · Youth`; y.player.teamId = club?.id ?? -1 }
-  // The game's own news rows, a short rolling window: eventid 5 = club transfer (team2 -> team1),
-  // eventid 1 = international retirement (team1 is a national team, so it is not a club move).
+  // The game's own news rows, a short rolling window. eventid 5 = club transfer: team1 is the club
+  // left and team2 the club joined (verified against where each player actually is in the save).
+  // eventid 1 = international retirement (team1 is a national team), not a club move.
   const events: TransferEvent[] = (t.persistent_events ?? []).filter(r => r.eventid === 5 || r.eventid === 1).map(r => ({
-    playerId: r.player1id as number, fromId: (r.eventid === 5 ? r.team2id : r.team1id) as number, toId: (r.eventid === 5 ? r.team1id : -1) as number,
+    playerId: r.player1id as number, fromId: r.team1id as number, toId: (r.eventid === 5 ? r.team2id : -1) as number,
     date: r.eventdate as number, kind: (r.eventid === 5 ? 'transfer' : 'intlRetirement') as 'transfer' | 'intlRetirement',
   })).sort((a, b) => b.date - a.date)
   return { events, players, teams, leagues, career, playerById, teamById, youth, scouts: t.career_scouts ?? [] }
