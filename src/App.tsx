@@ -458,7 +458,7 @@ function Suitors({ p, world, openClub }: { p: Player; world: World; openClub: (i
   const [open, setOpen] = useState(false)
   const [minStars, setMinStars] = useState(4)
   const [scope, setScope] = useState<'world' | 'league'>('world')
-  const [secondary, setSecondary] = useState(true)
+  const [secondary, setSecondary] = useState(false)
   const rows = useMemo(() => open ? suitors(world, p, { minStars, sameLeagueOnly: scope === 'league', includeSecondary: secondary }) : [], [open, world, p, minStars, scope, secondary])
   return <section className="suitors suitors-anchor">
     <button className="disclose" aria-expanded={open} onClick={() => setOpen(o => !o)}>
@@ -471,15 +471,15 @@ function Suitors({ p, world, openClub }: { p: Player; world: World; openClub: (i
         <div className="filters">
           <label><span>Club calibre</span><div className="seg">{[5, 4.5, 4, 3].map(s => <button key={s} className={minStars === s ? 'on' : ''} onClick={() => setMinStars(s)}>{s}★+</button>)}</div></label>
           <label><span>Scope</span><div className="seg"><button className={scope === 'world' ? 'on' : ''} onClick={() => setScope('world')}>All leagues</button><button className={scope === 'league' ? 'on' : ''} onClick={() => setScope('league')}>Own league</button></div></label>
-          <label className="chk-wrap"><span>Positions</span><label className="chk"><input type="checkbox" checked={secondary} onChange={e => setSecondary(e.target.checked)} /> Include secondary</label></label>
+          <label className="chk-wrap"><span>Positions</span><label className="chk" title="Also look at clubs needing one of his secondary positions. The club's incumbent is always the player who lists that position as his primary."><input type="checkbox" checked={secondary} onChange={e => setSecondary(e.target.checked)} /> Also his secondary positions</label></label>
         </div>
         {rows.length === 0 ? <p className="dim">No club at this level has a weaker option in {p.positions.join(' / ')}.</p> :
           <Table className="tbl"><thead><tr><th>Club</th><th className="num">OVR</th><th>Stars</th><th>League</th><th>Slot</th><th>Currently</th><th className="num">Upgrade</th></tr></thead><tbody>
             {rows.map(s => <tr key={s.team.id} className="click" onClick={() => openClub(s.team.id)}>
               <td className="name"><span className="with-crest"><Logo team={s.team} size={20} />{s.team.name}</span></td>
               <td className="num"><Rating v={s.team.ovr} /></td><td className="stars-cell"><Stars n={s.team.stars} /></td><td className="dim">{s.team.league}</td>
-              <td><Pos p={s.pos} /></td>
-              <td>{s.incumbent ? <span className="incumbent">{s.incumbent.shortName}<small>{s.incumbent.ovr} OVR · {s.incumbent.age}y{s.ageEdge ? ' · older' : ''}</small></span> : <span className="dim">no option</span>}</td>
+              <td><Pos p={s.pos} />{s.pos !== p.pos && <span className="tag" title="One of his secondary positions">2nd</span>}</td>
+              <td>{s.incumbent ? <span className="incumbent">{s.incumbent.shortName}<small>{s.incumbent.ovr} OVR · {s.incumbent.age}y{s.ageEdge ? ' · older' : ''}{s.coverOnly ? ` · ${s.incumbent.pos} covering` : ''}</small></span> : <span className="dim">nobody</span>}</td>
               <td className="num"><span className="trend up">+{s.gap}</span></td>
             </tr>)}
           </tbody></Table>}

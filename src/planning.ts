@@ -74,25 +74,29 @@ export function opportunity(index: Map<string, Player[]>, lineups: Map<number, C
 
 
 /** Clubs where this player would be an upgrade: their best option at the position is weaker, or the slot is empty. */
-export interface Suitor { team: import('./model').Team; incumbent?: Player; gap: number; pos: string; reason: 'empty' | 'upgrade'; ageEdge: boolean }
+export interface Suitor { team: import('./model').Team; incumbent?: Player; gap: number; pos: string; reason: 'empty' | 'upgrade'; ageEdge: boolean; coverOnly: boolean }
 export function suitors(world: World, player: Player, opts: { minStars?: number; sameLeagueOnly?: boolean; includeSecondary?: boolean; limit?: number } = {}): Suitor[] {
-  const { minStars = 0, sameLeagueOnly = false, includeSecondary = true, limit = 12 } = opts
+  const { minStars = 0, sameLeagueOnly = false, includeSecondary = false, limit = 12 } = opts
   const positions = includeSecondary ? player.positions : [player.pos]
   const out: Suitor[] = []
   for (const t of world.teams) {
     if (t.id === player.teamId || t.gender !== player.gender || t.leagueId < 0 || !t.players.length) continue
+    if (t.isSpecial || t.isYouth || t.isFreeAgentPool) continue   // icons, academies and free-agent pools are not clubs to join
     if (t.stars < minStars) continue
     if (sameLeagueOnly && t.leagueId !== player.leagueId) continue
-    let best: { pos: string; incumbent?: Player; gap: number } | null = null
+    let best: { pos: string; incumbent?: Player; gap: number; coverOnly: boolean } | null = null
     for (const pos of positions) {
-      const options = t.players.filter(p => p.positions.includes(pos))
-      const incumbent = options.sort((a, b) => b.ovr - a.ovr || b.pot - a.pot)[0]
+      // The incumbent is whoever plays that position as his primary. If the club has nobody there,
+      // fall back to the best player who lists it as a secondary and mark the slot as cover only.
+      const byPrimary = t.players.filter(q => q.pos === pos).sort((a, b) => b.ovr - a.ovr || b.pot - a.pot)[0]
+      const bySecondary = byPrimary ? undefined : t.players.filter(q => q.positions.includes(pos)).sort((a, b) => b.ovr - a.ovr || b.pot - a.pot)[0]
+      const incumbent = byPrimary ?? bySecondary
       const gap = incumbent ? player.ovr - incumbent.ovr : 99
       if (gap <= 0) continue
-      if (!best || gap > best.gap) best = { pos, incumbent, gap }
+      if (!best || gap > best.gap) best = { pos, incumbent, gap, coverOnly: !byPrimary && !!bySecondary }
     }
     if (!best) continue
-    out.push({ team: t, incumbent: best.incumbent, gap: best.gap === 99 ? player.ovr : best.gap, pos: best.pos, reason: best.incumbent ? 'upgrade' : 'empty', ageEdge: !!best.incumbent && best.incumbent.age - player.age >= 4 })
+    out.push({ team: t, incumbent: best.incumbent, gap: best.gap === 99 ? player.ovr : best.gap, pos: best.pos, reason: best.incumbent ? 'upgrade' : 'empty', ageEdge: !!best.incumbent && best.incumbent.age - player.age >= 4, coverOnly: best.coverOnly })
   }
   // Strongest clubs first — a place at a better club matters more than the size of the upgrade.
   return out.sort((a, b) => b.team.ovr - a.team.ovr || b.gap - a.gap).slice(0, limit)

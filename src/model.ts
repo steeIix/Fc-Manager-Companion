@@ -63,6 +63,7 @@ export interface Player {
   archetype: ArchetypeResult; rank: number; rankPos: number; rankLeague: number; classification: Classification; attrs: Record<string, number>; leagueApps: number; leagueGoals: number; form: number
 }
 export interface Team {
+  isSpecial: boolean; isYouth: boolean; isFreeAgentPool: boolean   // icon / 5v5 / Look Book squads, academies, free-agent pools
   id: number; name: string; gender: number; ovr: number; att: number; mid: number; def: number; worth: number
   stars: number; leagueId: number; league: string; tablePos: number; points: number; played: number; w: number; d: number; l: number; gf: number; ga: number
   prestige: number; intlPrestige: number; founded: number; capacity: number; colors: [string, string, string]
@@ -169,7 +170,7 @@ export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Reco
       gf: l ? (l.homegf as number) + (l.awaygf as number) : 0, ga: l ? (l.homega as number) + (l.awayga as number) : 0,
       prestige: r.domesticprestige as number, intlPrestige: r.internationalprestige as number, founded: r.foundationyear as number, capacity: r.teamstadiumcapacity as number,
       colors: [hex(r.teamcolor1r as number, r.teamcolor1g as number, r.teamcolor1b as number), hex(r.teamcolor2r as number, r.teamcolor2g as number, r.teamcolor2b as number), hex(r.teamcolor3r as number, r.teamcolor3g as number, r.teamcolor3b as number)],
-      squadSize: 0, avgAge: 0, squadValue: 0, captainId: r.captainid as number, players: [],
+      isSpecial: false, isYouth: false, isFreeAgentPool: false, squadSize: 0, avgAge: 0, squadValue: 0, captainId: r.captainid as number, players: [],
     }
     teams.push(tm); teamById.set(tm.id, tm)
   }
@@ -241,6 +242,11 @@ export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Reco
   }
   // Academy players live in a "Youth Squad [DO NOT USE]" club; they are not on the market.
   const academyIds = new Set<number>((t.career_youthplayers ?? []).map(r => r.playerid as number))
+  for (const tm of teams) {
+    tm.isFreeAgentPool = freeAgentLeagues.has(tm.leagueId)
+    tm.isYouth = youthLeagues.has(tm.leagueId) || /youth squad|do not use/i.test(tm.name)
+    tm.isSpecial = specialLeagues.has(tm.leagueId)
+  }
   for (const p of players) {
     p.isFreeAgent = p.teamId < 0 || freeAgentLeagues.has(p.leagueId)
     p.isSpecial = specialLeagues.has(p.leagueId)

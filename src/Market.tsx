@@ -27,15 +27,16 @@ export function Market({ world, prev, openClub, pick }: { world: World; prev: Ma
   const rows = useMemo(() => {
     const base = world.players.filter(p => p.gender === gender && !p.isSpecial && !p.isYouth && matchesPos(p, pos) && p.age <= maxAge && p.ovr >= minOvr && p.pot >= minPot)
     const byClubStars = (p: Player) => world.teamById.get(p.teamId)?.stars ?? 0
+    const realClub = (p: Player) => { const tm = world.teamById.get(p.teamId); return !!tm && !tm.isSpecial && !tm.isYouth && !tm.isFreeAgentPool }
     switch (lens) {
       case 'expiring': {
-        return base.filter(p => !p.isFreeAgent && p.contractUntil && p.contractUntil <= season && byClubStars(p) >= (minStars || 4))
+        return base.filter(p => !p.isFreeAgent && realClub(p) && p.contractUntil && p.contractUntil <= season && byClubStars(p) >= (minStars || 4))
           .sort((a, b) => a.contractUntil - b.contractUntil || rankOrder(a, b))
       }
       case 'free':
         return base.filter(p => p.isFreeAgent).sort(rankOrder)
       case 'gems':
-        return base.filter(p => !p.isFreeAgent && p.pot - p.ovr >= 5 && p.age <= Math.min(maxAge, 23) && byClubStars(p) <= (minStars || 3.5))
+        return base.filter(p => !p.isFreeAgent && realClub(p) && p.pot - p.ovr >= 5 && p.age <= Math.min(maxAge, 23) && byClubStars(p) <= (minStars || 3.5))
           .sort((a, b) => b.pot - a.pot || rankOrder(a, b))
       case 'drops': {
         if (!prev) return []
@@ -43,7 +44,7 @@ export function Market({ world, prev, openClub, pick }: { world: World; prev: Ma
       }
       case 'stuck': {
         return base.filter(p => {
-          if (p.isFreeAgent || p.age > Math.min(maxAge, 24)) return false
+          if (p.isFreeAgent || !realClub(p) || p.age > Math.min(maxAge, 24)) return false
           const team = world.teamById.get(p.teamId)
           if (!team) return false
           // Compare primary position to primary position only — a better winger who can also play there is not blocking him.

@@ -115,7 +115,7 @@ export function Transfers({ world, gameId, refresh, openClub, pick }: { world: W
     return r
   }, [moves, minOvr, gender, pos, club, onlyConfirmed, sort, win, latestKey])
 
-  const clubs = useMemo(() => world.teams.filter(t => t.leagueId >= 0 && t.gender === gender).sort((a, b) => a.name.localeCompare(b.name)), [world, gender])
+  const clubs = useMemo(() => world.teams.filter(t => t.leagueId >= 0 && t.gender === gender && !t.isSpecial && !t.isYouth && !t.isFreeAgentPool).sort((a, b) => a.name.localeCompare(b.name)), [world, gender])
   const confirmedCount = moves.filter(m => m.confirmed).length
 
   return <>
