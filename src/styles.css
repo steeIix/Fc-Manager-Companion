@@ -564,3 +564,11 @@ h1 .pencil { font-size: 14px; padding: 3px 7px; margin: 0 8px 0 0; vertical-alig
 .lens span { font-size: 11.5px; color: var(--ink-2); line-height: 1.35; display: block; }
 .lens.on b { color: var(--club); }
 @media (prefers-reduced-motion: reduce) { .lens:hover { transform: none; } }
+
+/* player roles */
+.arch-main .roles { margin-top: 12px; }
+.tag.role { margin: 0; font-weight: 700; font-size: 11px; background: var(--surface); border-color: var(--line); }
+.tag.role em { font-style: normal; margin-left: 4px; font-weight: 800; }
+.tag.role.rpp { border-color: var(--club); color: var(--club); background: var(--club-tint); }
+.tag.role.rp { color: var(--ink-2); }
+.tbl td.arch-cell small { text-transform: none; }

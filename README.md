@@ -133,3 +133,9 @@ All five share filters for men/women, position or group, minimum overall and pot
 ## Youth academy players
 
 Your scouted academy players are stored like normal players but sit in a club named "Youth Squad [DO NOT USE]" in a "Youth Squad League". They are flagged as `isYouth` (by that club, that league, or membership of `career_youthplayers`) and kept out of the market finder, player search, transfers and the world rankings — they aren't signable and would otherwise appear as free transfers or hidden gems. They remain visible where they belong: the Youth tab on your club page.
+
+## Player roles (FC IQ)
+
+The save stores each player's roles in `players.role1`-`role5`. There is no name table, so the mapping in `src/roles.ts` was reverse-engineered: the ID space is position-scoped in the order EA lists each position's roles (GK 1-2, RB 3-6, LB 7-10, CB 11-13, CDM 14-17, CM 18-22, RM 23-26, LM 27-30, CAM 31-34, RW 35-37, LW 38-40, ST 41-44), with FC 26's four new roles appended: 45 Ball-Playing Keeper, 46/47 Inverted Wingback, 48 Wide Back, 49 Box Crasher. A stored value of ID + 100 means the role is held at ++ rather than +; this was confirmed against the players EA named as ++ examples (Alisson and Maignan Ball-Playing Keeper++, Rice Box Crasher++, Tomori and Pavard Wide Back+, Lewis-Skelly Inverted Wingback+). 263 players in a test save hold a ++ role, matching EA's "reserved for the best-of-the-best".
+
+Roles are fused with the attribute archetype: the role supplies the tactical noun and the archetype the qualifier, so Yamal reads "Wide-Creative Inside Forward" and Mbappe "Deep-Dropping Advanced Forward". When the qualifier would restate the role it is dropped (no "Playmaking Playmaker"). The fused name is what rosters, search and the profile show; the profile also lists every role the game gives him with its + / ++ familiarity, and search can filter by role and narrow to ++ only.

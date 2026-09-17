@@ -1,5 +1,6 @@
 import type { Row } from './parser'
 import { rawScores, groupStats, finalize, type ArchetypeResult } from './archetypes'
+import { decodeRoles, type PlayerRole } from './roles'
 
 export const POS = ['GK','SW','RWB','RB','RCB','CB','LCB','LB','LWB','RDM','CDM','LDM','RM','RCM','CM','LCM','LM','RAM','CAM','LAM','RF','CF','LF','RW','RS','ST','LS','LW','SUB','RES']
 export const POS_SIMPLE: Record<string, string> = { SW:'CB', RCB:'CB', LCB:'CB', LWB:'LB', RWB:'RB', RDM:'CDM', LDM:'CDM', RCM:'CM', LCM:'CM', RAM:'CAM', LAM:'CAM', RF:'CF', LF:'CF', RS:'ST', LS:'ST' }
@@ -60,7 +61,7 @@ export interface Player {
   joined: Date; joinedLabel: string; tenure: string; contractUntil: number; value: number; wage: number | null; onLoanFrom: string | null; loanEnd: string | null
   face: { PAC: number; SHO: number; PAS: number; DRI: number; DEF: number; PHY: number }
   gk: { DIV: number; HAN: number; KIC: number; REF: number; POS: number; SPD: number }
-  archetype: ArchetypeResult; rank: number; rankPos: number; rankLeague: number; classification: Classification; attrs: Record<string, number>; leagueApps: number; leagueGoals: number; form: number
+  archetype: ArchetypeResult; roles: PlayerRole[]; rank: number; rankPos: number; rankLeague: number; classification: Classification; attrs: Record<string, number>; leagueApps: number; leagueGoals: number; form: number
 }
 export interface Team {
   isSpecial: boolean; isYouth: boolean; isFreeAgentPool: boolean   // icon / 5v5 / Look Book squads, academies, free-agent pools
@@ -223,7 +224,7 @@ export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Reco
       contractUntil: r.contractvaliduntil as number, value: estimateValue(vm, ovr, age, pot, isGK ? 'GK' : posGroup(pos)),
       wage: ct ? (ct.wage as number) : null,
       onLoanFrom: lo ? (teamById.get(lo.teamidloanedfrom as number)?.name ?? 'Unknown club') : null, loanEnd: lo ? fmtDate(lilianToDate(lo.loandateend as number)) : null,
-      isFreeAgent: false, isSpecial: false, isYouth: false, face, gk, attrs, archetype: null as unknown as ArchetypeResult, rank: 0, rankPos: 0, rankLeague: 0, classification: null as unknown as Classification, leagueApps: lk ? (lk.leagueappearances as number) : 0, leagueGoals: lk ? (lk.leaguegoals as number) : 0, form: lk ? (lk.form as number) : 0,
+      isFreeAgent: false, isSpecial: false, isYouth: false, face, gk, attrs, roles: decodeRoles([1, 2, 3, 4, 5].map(i => r[`role${i}`] as number)), archetype: null as unknown as ArchetypeResult, rank: 0, rankPos: 0, rankLeague: 0, classification: null as unknown as Classification, leagueApps: lk ? (lk.leagueappearances as number) : 0, leagueGoals: lk ? (lk.leaguegoals as number) : 0, form: lk ? (lk.form as number) : 0,
     }
     players.push(p); playerById.set(id, p)
     if (team) team.players.push(p)
@@ -231,7 +232,7 @@ export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Reco
   // Archetypes: two passes so each archetype is judged against the same position group's population.
   const rawAll = players.map(p => rawScores(p.pos, p.attrs))
   const stats = groupStats(rawAll)
-  players.forEach((p, i) => { p.archetype = finalize(rawAll[i].group, rawAll[i].raw, stats, p.attrs, { skill: p.skill, height: p.height, ovr: p.ovr }) })
+  players.forEach((p, i) => { p.archetype = finalize(rawAll[i].group, rawAll[i].raw, stats, p.attrs, { skill: p.skill, height: p.height, ovr: p.ovr, role: p.roles[0] }) })
   // Free-agent pool and placeholder squads (icons, 5v5, Look Book) are not a real market or ranking pool.
   const freeAgentLeagues = new Set<number>(), specialLeagues = new Set<number>(), youthLeagues = new Set<number>()
   for (const r of t.leagues ?? []) {
