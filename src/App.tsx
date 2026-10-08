@@ -96,7 +96,7 @@ function useTheme() {
 }
 const ThemeButton = ({ t }: { t: { theme: string; toggle: () => void } }) => <button className="theme-btn" onClick={t.toggle} aria-label="Toggle dark mode">{t.theme === 'dark' ? '☀ Light' : '☾ Dark'}</button>
 
-type View = { kind: 'market' } | { kind: 'transfers' } | { kind: 'games' } | { kind: 'shortlist' } | { kind: 'snapshots' } | { kind: 'leagues' } | { kind: 'league'; id: number } | { kind: 'club'; id: number } | { kind: 'players' } | { kind: 'my' }
+type View = { kind: 'market' } | { kind: 'transfers' } | { kind: 'games' } | { kind: 'shortlist' } | { kind: 'snapshots' } | { kind: 'leagues' } | { kind: 'league'; id: number } | { kind: 'club'; id: number } | { kind: 'players' } | { kind: 'my' } | { kind: 'me' }
 
 const Rating = ({ v }: { v: number }) => <span className={'rt ' + (v >= 85 ? 'r5' : v >= 78 ? 'r4' : v >= 70 ? 'r3' : v >= 60 ? 'r2' : 'r1')}>{v}</span>
 const Pos = ({ p }: { p: string }) => <span className={'pos ' + posGroup(p).toLowerCase()}>{p}</span>
@@ -159,7 +159,7 @@ export default function App() {
       const w = buildWorld(tables, assets.current!.names, assets.current!.nations, assets.current!.vm, loadOverrides())
       if (existingId) { setSnapId(existingId); if (existing) await saveSnapshot({ ...fromWorld(w, file.name, active.id), id: existing.id, order: existing.order, label: existing.label, savedAt: existing.savedAt }) }
       else { const s = fromWorld(w, file.name, active.id); await saveWithFile(s, buf); setSnapId(s.id); setSnapTick(x => x + 1) }
-      setGame(active); setSel(null); setWorld(w); setFileName(file.name); setView(w.career.club ? { kind: 'my' } : { kind: 'leagues' })
+      setGame(active); setSel(null); setWorld(w); setFileName(file.name); setView(w.career.mode === 'player' && w.career.me ? { kind: 'me' } : w.career.club ? { kind: 'my' } : { kind: 'leagues' })
     } catch (e: any) { setErr(e.message || String(e)) }
     setBusy(''); loadingFile.current = false
   }
@@ -178,11 +178,12 @@ export default function App() {
   return (<PrevCtx.Provider value={prev}><RenameCtx.Provider value={rename}>
     <TargetContext.Provider value={{ ids: game?.shortlist ?? [], toggle }}><div className="shell">
       <aside className="rail">
-        <div className="brand"><small style={{ marginTop: 0, marginBottom: 6 }}>FC26 Companion</small>Manager Desk<small>{fileName}</small></div>
+        <div className="brand"><small style={{ marginTop: 0, marginBottom: 6 }}>FC26 Companion</small>{c.mode === 'player' ? 'Player Desk' : 'Manager Desk'}<small>{fileName}</small></div>
         <ClubSwitcher world={world} viewed={viewedClub ?? undefined} go={id => setView({ kind: 'club', id })} />
         <nav>
           <button className={view.kind === 'games' ? 'on' : ''} onClick={() => setView({ kind: 'games' })}>Games &amp; saves</button>
           <button className={view.kind === 'shortlist' ? 'on' : ''} onClick={() => setView({ kind: 'shortlist' })}>Shortlist ({game?.shortlist.length ?? 0})</button>
+          {c.me && <button className={view.kind === 'me' ? 'on' : ''} onClick={() => setView({ kind: 'me' })}>My player</button>}
           {c.club && <button className={view.kind === 'my' ? 'on' : ''} onClick={() => setView({ kind: 'my' })}>My club</button>}
           <button className={view.kind === 'leagues' || view.kind === 'league' ? 'on' : ''} onClick={() => setView({ kind: 'leagues' })}>Leagues &amp; clubs</button>
           <button className={view.kind === 'players' ? 'on' : ''} onClick={() => setView({ kind: 'players' })}>Player search</button>
@@ -203,6 +204,7 @@ export default function App() {
         {view.kind === 'market' && <Market world={world} prev={prev?.map ?? null} openClub={id => setView({ kind: 'club', id })} pick={setSel} />}
         {view.kind === 'transfers' && <Transfers world={world} gameId={game?.id} refresh={snapTick} openClub={id => setView({ kind: 'club', id })} pick={id => { const p = world.playerById.get(id); if (p) setSel(p) }} />}
         {view.kind === 'snapshots' && <Snapshots key={game?.id} gameId={game?.id ?? 'legacy'} currentId={snapId} refresh={snapTick} />}
+        {view.kind === 'me' && c.me && <MyPlayer me={c.me} world={world} gameId={game?.id} refresh={snapTick} pick={setSel} openClub={id => setView({ kind: 'club', id })} />}
         {view.kind === 'my' && c.club && <MyClub game={game} onGameChange={setGame} world={world} open={() => setView({ kind: 'club', id: c.club!.id })} pick={setSel} />}
       </main>
       {sel && <PlayerModal gameId={game?.id ?? 'legacy'} refresh={snapTick} p={sel} world={world} close={() => setSel(null)} openClub={id => { setSel(null); setView({ kind: 'club', id }) }} />}
@@ -217,7 +219,7 @@ function DropScreen({ onFile, busy, err }: { onFile: (f: File) => void; busy: st
       <div className={'zone' + (over ? ' over' : '')} onDragOver={e => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
         onDrop={e => { e.preventDefault(); setOver(false); if (busy) return; const f = e.dataTransfer.files[0]; if (f) onFile(f) }}>
         <strong>Drop your career save here</strong>
-        <div>Files are named <span className="path">CmMgrC…</span> or <span className="path">CmMgrP…</span> and live in <span className="path">%LOCALAPPDATA%\EA SPORTS FC 26\settings</span></div>
+        <div>Files are named <span className="path">CmMgrC…</span> (manager career) or <span className="path">CmPlr…</span> (player career) and live in <span className="path">%LOCALAPPDATA%\EA SPORTS FC 26\settings</span></div>
         <label>Choose a file<input disabled={!!busy} type="file" onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f) }} /></label>
         {busy && <div className="progress">{busy}</div>}
       </div>
@@ -275,18 +277,18 @@ function LeagueBest({ league, open, pick, world }: { league: League; open: (id: 
 
 function LeagueView({ league, back, open, userClub, pick, world }: { league: League; back: () => void; open: (id: number) => void; userClub: number; pick: (p: Player) => void; world: World }) {
   const hasTable = league.teams.some(t => t.played > 0)
-  const { sorted, Th } = useSort(league.teams, hasTable ? 'pos' : 'ovr', (t, k) => k === 'pos' ? -(t.tablePos || 99) : k === 'name' ? t.name : (t as any)[k], true)
+  const { sorted, Th } = useSort(league.teams, hasTable ? 'pos' : 'ovr', (t, k) => k === 'pos' ? -(t.tablePos || 99) : k === 'name' ? t.name : k === 'gameOvr' ? t.game.ovr : k === 'ovr' ? (t.rating?.score ?? t.ovr) : (t as any)[k], true)
   return <>
     <div className="crumb"><button onClick={back}>Leagues</button><span>/</span><span>{league.name}</span></div>
     <h1>{league.name}</h1>
     <p className="sub">{league.teams.length} clubs · average rating {league.avgOvr}{league.women ? ' · women\'s competition' : ''}</p>
     <Table className="tbl"><thead><tr>
-      {hasTable && <Th id="pos" label="#" num />}<Th id="name" label="Club" /><Th id="ovr" label="OVR" num /><Th id="att" label="ATT" num /><Th id="mid" label="MID" num /><Th id="def" label="DEF" num /><th>Stars</th><Th id="squadValue" label="Squad value" num /><Th id="worth" label="Club worth" num /><Th id="squadSize" label="Squad" num /><Th id="avgAge" label="Avg age" num />
+      {hasTable && <Th id="pos" label="#" num />}<Th id="name" label="Club" /><Th id="ovr" label="OVR" num /><Th id="gameOvr" label="In-game" num /><Th id="att" label="ATT" num /><Th id="mid" label="MID" num /><Th id="def" label="DEF" num /><th>Stars</th><Th id="squadValue" label="Squad value" num /><Th id="worth" label="Club worth" num /><Th id="squadSize" label="Squad" num /><Th id="avgAge" label="Avg age" num />
       {hasTable && <><Th id="played" label="P" num /><Th id="points" label="Pts" num /></>}
     </tr></thead><tbody>
       {sorted.map(t => <tr key={t.id} className={'click' + (t.id === userClub ? ' user' : '')} onClick={() => open(t.id)}>
         {hasTable && <td className="num dim">{t.tablePos || '–'}</td>}
-        <td className="name"><span className="with-crest"><Logo team={t} size={22} />{t.name}</span></td><td className="num"><Rating v={t.ovr} /></td><td className="num">{t.att}</td><td className="num">{t.mid}</td><td className="num">{t.def}</td>
+        <td className="name"><span className="with-crest"><Logo team={t} size={22} />{t.name}</span></td><td className="num" title={t.rating ? `Companion rating ${t.rating.score}` : undefined}><Rating v={t.ovr} /></td><td className="num dim">{t.game.ovr}</td><td className="num">{t.att}</td><td className="num">{t.mid}</td><td className="num">{t.def}</td>
         <td><Stars n={t.stars} /></td><td className="num">{fmtMoney(t.squadValue)}</td><td className="num">{t.worth ? fmtMoney(t.worth) : '–'}</td><td className="num">{t.squadSize}</td><td className="num">{t.avgAge}</td>
         {hasTable && <><td className="num">{t.played}</td><td className="num"><b>{t.points}</b></td></>}
       </tr>)}
@@ -297,23 +299,55 @@ function LeagueView({ league, back, open, userClub, pick, world }: { league: Lea
 
 function ClubHeader({ t, world }: { t: Team; world: World }) {
   const ovr = useCountUp(t.ovr)
+  const [how, setHow] = useState(false)
+  const r = t.rating
+  // Our scale sits ~3 points above the game's (it averages the XI; the game discounts it), so only flag a real gap.
+  const lag = r ? r.score - GAME_OFFSET - t.game.ovr : 0
   return <div className="club-head">
     <div className="stripe">{t.colors.map((c, i) => <i key={i} style={{ background: c }} />)}</div>
     <div className="body">
-      <div className="ovr">{ovr}<small>overall · <Stars n={t.stars} /></small></div>
-      <div className="club-title"><Logo team={t} size={72} className="club-crest" /><div><h1>{t.name}</h1><div className="meta">{t.league}{t.played ? ` · ${ordinal(t.tablePos)} in table, ${t.points} pts from ${t.played}` : ' · season not started'}{t.founded ? ` · est. ${t.founded}` : ''}{t.capacity ? ` · ${t.capacity.toLocaleString()} seats` : ''}{t.id === world.career.clubId ? ' · your club' : ''}</div></div></div>
+      <div className="ovr" title={r ? `Companion rating ${r.score}` : 'Stored game rating'}>{ovr}<small>{r ? 'squad rating' : 'overall'} · <Stars n={t.stars} /></small></div>
+      <div className="club-title"><Logo team={t} size={72} className="club-crest" /><div><h1>{t.name}</h1><div className="meta">{t.league}{t.played ? ` · ${ordinal(t.tablePos)} in table, ${t.points} pts from ${t.played}` : ' · season not started'}{t.founded ? ` · est. ${t.founded}` : ''}{t.capacity ? ` · ${t.capacity.toLocaleString()} seats` : ''}{t.id === world.career.clubId ? ' · your club' : ''}</div>
+        {r && <div className="rating-line">{t.ratingRank ? <><b>{ordinal(t.ratingRank)}</b> strongest {t.gender === 1 ? "women's " : ''}squad in the world{t.ratingLeagueRank ? <> · <b>{ordinal(t.ratingLeagueRank)}</b> in the league</> : null} · </> : null}
+          <span className="dim">in-game {t.game.ovr} <Stars n={t.game.stars} />{lag >= 3 ? ' — the game hasn\'t caught up with this squad yet' : ''}</span>
+          <button className="text-btn how-btn" onClick={() => setHow(h => !h)} aria-expanded={how}>{how ? 'Hide breakdown' : 'How it\'s rated'}</button></div>}
+      </div></div>
       <div className="kpis">
-        <div className="kpi"><b>{t.att} / {t.mid} / {t.def}</b><span>Attack / midfield / defence</span></div>
+        <div className="kpi"><b>{t.att} / {t.mid} / {t.def}{r ? <> / {t.gk}</> : null}</b><span>Attack / midfield / defence{r ? ' / keeper' : ''}</span></div>
         <div className="kpi"><b>{fmtMoney(t.squadValue)}</b><span>Squad value</span></div>
         <div className="kpi"><b>{t.worth ? fmtMoney(t.worth) : '–'}</b><span>Club worth</span></div>
         <div className="kpi"><b>{t.squadSize} · {t.avgAge}</b><span>Players · average age</span></div>
       </div>
     </div>
+    {r && <Collapse open={how}><RatingBreakdown t={t} /></Collapse>}
+  </div>
+}
+const GAME_OFFSET = 3.3
+const FIT_LABEL = { main: 'main position', secondary: 'secondary −1', adapted: 'adapted −4', out: 'out of position −12', empty: 'no one' } as const
+function RatingBreakdown({ t }: { t: Team }) {
+  const r = t.rating!
+  const lines = (['ATT', 'MID', 'DEF', 'GK'] as const).map(l => ({ l, slots: r.xi.filter(x => x.line === l) }))
+  return <div className="rating-break">
+    <div className="rb-xi">
+      <h3>Strongest XI · {r.formation}</h3>
+      {lines.map(({ l, slots }) => <div key={l} className="rb-line"><span className="rb-tag">{l}<b>{r.lines[l]}</b></span>
+        <div className="rb-slots">{slots.map((x, i) => <div key={i} className={'rb-slot fit-' + x.fit} title={x.player ? `${x.player.name} · ${x.player.pos} ${x.player.ovr} → ${x.slot} ${x.eff} (${FIT_LABEL[x.fit]})` : 'Empty slot (counts as 50)'}>
+          <small>{x.slot}</small><b>{x.player?.shortName ?? '—'}</b><span>{x.eff}{x.fit !== 'main' && x.fit !== 'empty' ? <i> · {x.player!.pos}</i> : null}</span></div>)}</div></div>)}
+      {r.bench.length > 0 && <p className="dim rb-bench">Bench depth: {r.bench.map(p => `${p.shortName} ${p.ovr}`).join(' · ')}</p>}
+    </div>
+    <div className="rb-sum">
+      <h3>The formula</h3>
+      <div className="rb-row"><span>Core<small>average of the XI above</small></span><b>{r.core}</b><em>× 75%</em></div>
+      <div className="rb-row"><span>Star power<small>best three in the XI</small></span><b>{r.top}</b><em>× 15%</em></div>
+      <div className="rb-row"><span>Depth<small>best seven on the bench</small></span><b>{r.depth}</b><em>× 10%</em></div>
+      <div className="rb-row total"><span>Squad rating<small>{r.score} rounds to {t.ovr}</small></span><b>{r.score}</b><em><Stars n={r.stars} /></em></div>
+      <p className="dim">Every formation is tried and the best total wins. A player keeps his full rating in his main position, loses 1 in a listed secondary, 4 in a neighbouring role and 12 anywhere else. Stars: 5 from 85.5, 4½ from 81.5, 4 from 77.5, 3½ from 73.5, 3 from 71. The in-game figure ({t.game.ovr}) only refreshes when the game recalculates it — usually at a new season or when the team sheet is saved.</p>
+    </div>
   </div>
 }
 const ordinal = (n: number) => n + (['th', 'st', 'nd', 'rd'][(n % 100 > 10 && n % 100 < 14) ? 0 : Math.min(n % 10, 4) % 4] ?? 'th')
 
-function Roster({ players, world, pick, wages }: { players: Player[]; world: World; pick: (p: Player) => void; wages: boolean }) {
+function Roster({ players, world, pick, wages, highlight }: { players: Player[]; world: World; pick: (p: Player) => void; wages: boolean; highlight?: number }) {
   const prev = useContext(PrevCtx)
   const [mode, setMode] = useState<'pos' | 'ovr' | 'pot' | 'value' | 'age'>('pos')
   const rows = useMemo(() => {
@@ -348,6 +382,77 @@ function ClubView({ team, world, back, pick }: { team: Team; world: World; back:
     <div className="crumb"><button onClick={back}>{team.league}</button><span>/</span><span>{team.name}</span></div>
     <ClubHeader t={team} world={world} />
     <Roster players={team.players} world={world} pick={pick} wages={team.id === world.career.clubId} />
+  </>
+}
+
+/** Home screen for a Player Career save: you first, then the squad around you. */
+function MyPlayer({ me, world, gameId, refresh, pick, openClub }: { me: Player; world: World; gameId?: string; refresh: number; pick: (p: Player) => void; openClub: (id: number) => void }) {
+  const team = world.teamById.get(me.teamId)
+  const grp = rankGroupOf(me.pos)
+  // Everyone in your ranking pool (same gender and position group, real clubs only), in rank order.
+  const pool = useMemo(() => world.players.filter(p => p.rank && p.gender === me.gender && rankGroupOf(p.pos) === grp).sort((a, b) => a.rank - b.rank), [world, me])
+  const at = (r: number) => pool[r - 1]
+  const milestones = [
+    { label: `World's Best ${GROUP_LONG[grp]}`, rank: 1 },
+    { label: 'World-Class', rank: 10 },
+    { label: 'Elite', rank: 30 },
+    { label: 'Top 100', rank: 100 },
+  ].filter(m => me.rank > m.rank && at(m.rank)).map(m => ({ ...m, ovr: at(m.rank)!.ovr, gap: at(m.rank)!.ovr - me.ovr }))
+  // Your age group: same pool, same age.
+  const peers = useMemo(() => pool.filter(p => p.age === me.age).sort((a, b) => b.pot - a.pot || rankOrder(a, b)), [pool, me])
+  const peerRank = peers.findIndex(p => p.id === me.id) + 1
+  // Competition for your shirt: teammates whose primary position is yours.
+  const rivals = useMemo(() => (team?.players ?? []).filter(p => p.pos === me.pos).sort(rankOrder), [team, me])
+  const depth = rivals.findIndex(p => p.id === me.id) + 1
+  const starter = rivals[0]
+  const inGroup = useMemo(() => (team?.players ?? []).filter(p => rankGroupOf(p.pos) === grp).sort(rankOrder), [team, me])
+  const groupDepth = inGroup.findIndex(p => p.id === me.id) + 1
+  return <>
+    <div className="me-hero">
+      <div className={'me-card' + (me.ovr >= 85 ? ' gold' : '')}><div className="o">{me.ovr}</div><div className="p">{me.pos}</div><div className="pot">Potential {me.pot}</div></div>
+      <div className="me-main">
+        <span className="arch-kicker">Player career · Season {world.career.season} ({seasonLabel(world.career.season)})</span>
+        <h1>{me.name}</h1>
+        <div className="meta">{team ? <a href="#" className="with-crest" onClick={e => { e.preventDefault(); openClub(team.id) }}><Logo team={team} size={20} />{team.name}</a> : 'Free agent'} · {me.league} · {me.nation} · {me.age} years old</div>
+        <div className="me-standing"><ClassTag p={me} />{me.rank ? <span>#{me.rank} {GROUP_LONG[grp].toLowerCase()} in the world</span> : null}<span className="dim">{me.archetype.roleLabel ?? me.archetype.label}</span></div>
+        <div className="facts">
+          <div><span>Still to grow</span><b>+{Math.max(0, me.pot - me.ovr)}</b></div>
+          <div><span>Estimated value</span><b>{fmtMoney(me.value)}</b></div>
+          <div><span>Wage</span><b>{fmtMoney(me.wage ?? world.career.wage)} / wk</b></div>
+          <div><span>Contract until</span><b>{me.contractUntil || '–'}</b></div>
+          <div><span>Squad role</span><b>{me.squadPos}{me.jersey ? ` · #${me.jersey}` : ''}</b></div>
+          <div><span>At club since</span><b>{me.joinedLabel}<span className="dim" style={{ display: 'block', fontWeight: 400, fontSize: 12 }}>{me.tenure}</span></b></div>
+          {world.career.agent && <div><span>Agent</span><b>{world.career.agent}</b></div>}
+          <div><span>League goals</span><b>{me.leagueGoals}</b></div>
+        </div>
+        <button className="btn" onClick={() => pick(me)}>Full profile — attributes, roles, history</button>
+      </div>
+    </div>
+
+    <div className="me-grid">
+      <section className="me-panel">
+        <h2>Your spot in the squad</h2>
+        <p className="sub">{rivals.length <= 1 ? <>You are the only {me.pos} at {team?.name}.</> : depth === 1 ? <>You are first choice at {me.pos} — {rivals.length - 1} {rivals.length === 2 ? 'other' : 'others'} behind you.</> : <>You are {ordinal(depth)} of {rivals.length} at {me.pos}; {starter?.shortName} ({starter?.ovr}) holds the shirt, {starter ? starter.ovr - me.ovr : 0} ahead of you.</>} {ordinal(groupDepth)} of {inGroup.length} {GROUP_PLURAL[grp]} in the squad.</p>
+        <Table className="tbl"><thead><tr><th className="num">#</th><th>Player</th><th className="num">Age</th><th className="num">OVR</th><th className="num">POT</th><th>Squad slot</th></tr></thead><tbody>
+          {rivals.map((p, i) => <tr key={p.id} className={'click' + (p.id === me.id ? ' me' : '')} onClick={() => pick(p)}><td className="num dim">{i + 1}</td><td className="name">{p.name}</td><td className="num">{p.age}</td><td className="num"><Rating v={p.ovr} /></td><td className="num dim">{p.pot}</td><td className="dim">{p.squadPos}</td></tr>)}
+        </tbody></Table>
+      </section>
+
+      <section className="me-panel">
+        <h2>Road to the top</h2>
+        <p className="sub">Where you stand among the world's {me.gender ? "women's " : ''}{GROUP_PLURAL[grp]}, and the overall it currently takes to reach each tier.</p>
+        {milestones.length === 0 ? <p>You are the world's best {GROUP_LONG[grp].toLowerCase()}.</p> :
+          <div className="milestones">{milestones.map(m => <div key={m.rank} className="ms"><span>{m.label}</span><b>{m.ovr} OVR</b><em className={m.gap <= 0 ? 'ok' : ''}>{m.gap <= 0 ? 'rating is there — rank follows' : `+${m.gap} to go`}</em></div>)}</div>}
+        {peers.length > 1 && <p className="sub" style={{ marginTop: 14 }}>Among {peers.length} {me.age}-year-old {GROUP_PLURAL[grp]}, your potential ranks <b>#{peerRank}</b>{peers[0].id !== me.id && <> — {peers[0].shortName} ({peers[0].ovr}/{peers[0].pot}, {peers[0].team}) is top</>}.</p>}
+      </section>
+    </div>
+
+    <Suitors p={me} world={world} openClub={openClub} />
+
+    <h2>Teammates</h2>
+    {team ? <Roster players={team.players} world={world} pick={pick} wages={false} highlight={me.id} /> : <p className="dim">You are without a club.</p>}
+
+    {gameId && <Timeline id={me.id} gameId={gameId} refresh={refresh} />}
   </>
 }
 

@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "node --import tsx tests/core.ts",
-    "test:browser": "node tests/browser.mjs"
+    "test:browser": "node tests/browser.mjs",
+    "test:rating": "node --import tsx tests/rating.ts"
   },
   "dependencies": {
     "react": "^18.3.1",

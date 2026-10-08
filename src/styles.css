@@ -572,3 +572,55 @@ h1 .pencil { font-size: 14px; padding: 3px 7px; margin: 0 8px 0 0; vertical-alig
 .tag.role.rpp { border-color: var(--club); color: var(--club); background: var(--club-tint); }
 .tag.role.rp { color: var(--ink-2); }
 .tbl td.arch-cell small { text-transform: none; }
+
+/* player career hub */
+.me-hero { display: grid; grid-template-columns: auto 1fr; gap: 26px; align-items: start; border-bottom: 2px solid var(--line); padding-bottom: 22px; margin-bottom: 22px; }
+.me-card { width: 150px; padding: 18px 14px; text-align: center; color: var(--club-ink); background: var(--club); animation: fcPop .4s var(--ease) both; }
+.me-card .o { font-family: var(--display); font-weight: 800; font-size: 72px; line-height: .9; }
+.me-card .p { font-family: var(--display); font-weight: 800; font-size: 22px; margin-top: 4px; }
+.me-card .pot { font-size: 12px; opacity: .85; margin-top: 4px; }
+.me-main h1 { margin: 2px 0 6px; }
+.me-main .meta { color: var(--ink-2); }
+.me-standing { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 12px 0 4px; font-size: 13px; font-weight: 700; }
+.me-standing .dim { font-weight: 400; }
+.me-main .facts { margin: 14px 0 16px; }
+.me-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; align-items: start; margin-bottom: 8px; }
+.me-panel h2 { margin-top: 0; }
+.milestones { display: grid; gap: 8px; }
+.ms { display: grid; grid-template-columns: 1fr auto auto; gap: 14px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); background: var(--surface); }
+.ms span { font-weight: 700; }
+.ms b { font-family: var(--display); font-weight: 800; }
+.ms em { font-style: normal; font-size: 12px; color: var(--ink-3); min-width: 150px; text-align: right; }
+.ms em.ok { color: #1f7a48; }
+.tbl tr.me td { background: var(--club-tint); font-weight: 700; }
+@media (max-width: 900px) { .me-grid, .me-hero { grid-template-columns: 1fr; } }
+
+/* v30 — Companion squad rating */
+.club-head .rating-line { margin-top: 6px; font-size: 13px; color: var(--ink-2); display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; }
+.club-head .rating-line b { color: var(--ink); }
+.club-head .rating-line .stars { font-size: 12px; color: var(--ink-3); }
+.how-btn { margin-left: 6px; font-size: 12px; font-weight: 600; color: var(--club); text-decoration: underline; text-underline-offset: 3px; }
+.rating-break { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr); gap: 24px 40px; padding: 4px 0 24px; }
+@media (max-width: 860px) { .rating-break { grid-template-columns: 1fr; } }
+.rating-break h3 { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 12px; font-weight: 700; }
+.rb-line { display: flex; gap: 12px; align-items: stretch; padding: 8px 0; border-top: 1px solid var(--line-soft); }
+.rb-tag { flex: 0 0 52px; display: flex; flex-direction: column; font-size: 10px; letter-spacing: .12em; color: var(--ink-3); font-weight: 700; }
+.rb-tag b { font-family: var(--display); font-size: 22px; color: var(--ink); letter-spacing: -.02em; }
+.rb-slots { flex: 1; display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
+.rb-slot { background: var(--surface-2); border-radius: 8px; padding: 6px 9px; display: flex; flex-direction: column; min-width: 0; border-left: 3px solid var(--club); animation: fcUp .35s ease-out both; }
+.rb-slot small { font-size: 10px; letter-spacing: .1em; color: var(--ink-3); font-weight: 700; }
+.rb-slot b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rb-slot span { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.rb-slot span i { font-style: normal; color: var(--ink-3); }
+.rb-slot.fit-secondary { border-left-color: var(--gold); }
+.rb-slot.fit-adapted, .rb-slot.fit-out { border-left-color: var(--red); }
+.rb-slot.fit-empty { border-left-color: var(--line); opacity: .6; }
+.rb-bench { font-size: 12px; margin: 10px 0 0; }
+.rb-row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: baseline; padding: 9px 0; border-top: 1px solid var(--line-soft); }
+.rb-row span { font-weight: 600; font-size: 14px; }
+.rb-row span small { display: block; font-weight: 400; font-size: 12px; color: var(--ink-3); }
+.rb-row b { font-family: var(--display); font-size: 22px; font-variant-numeric: tabular-nums; }
+.rb-row em { font-style: normal; color: var(--ink-3); font-size: 12px; text-align: right; white-space: nowrap; min-width: 48px; }
+.rb-row.total { border-top: 2px solid var(--ink); }
+.rb-row.total b { font-size: 28px; color: var(--club); }
+.rb-sum p { font-size: 12px; line-height: 1.55; margin-top: 12px; }

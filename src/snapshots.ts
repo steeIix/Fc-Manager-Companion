@@ -1,6 +1,7 @@
 import type { World } from './model'
 export interface PSnap { id: number; n: string; ovr: number; pot: number; age: number; birth?: string; contract?: number | null; pos: string; t: number; team: string; v: number; g: number; ar?: string; rk?: number }
-export interface TSnap { id: number; n: string; ovr: number; v: number; lg: string }
+/** ovr = the game's stored rating; cr = Companion squad rating (saves from v30 on). */
+export interface TSnap { id: number; n: string; ovr: number; v: number; lg: string; cr?: number }
 export interface Snapshot {
   events?: { p: number; f: number; t: number; d: number; k: string }[]; order?: number; history?: HistoryFinish[]; id: string; gameId?: string; label: string; fileName: string; savedAt: number; asOf: number; season: number; manager: string; clubId: number; club: string; players: PSnap[]; teams: TSnap[] }
 export type SnapMeta = Omit<Snapshot, 'players' | 'teams'> & { playerCount: number }
@@ -43,7 +44,7 @@ export function fromWorld(w: World, fileName: string, gameId = 'legacy'): Snapsh
     events: w.events.map(e => ({ p: e.playerId, f: e.fromId, t: e.toId, d: e.date, k: e.kind })),
     players: w.players.map(p => ({ id: p.id, n: p.name, ovr: p.ovr, pot: p.pot, age: p.age, birth: p.birth, contract: p.contractUntil || null, pos: p.pos, t: p.teamId, team: p.team, v: p.value, g: p.gender, ar: p.archetype.label, rk: p.rank })),
     history: c.history.map(h => ({ season: Number(h.season), team: Number(h.teamid), league: Number(h.leagueid), position: Number(h.tableposition), completed: Number(h.season) < c.season })),
-    teams: w.teams.map(t => ({ id: t.id, n: t.name, ovr: t.ovr, v: t.squadValue, lg: t.league })) }
+    teams: w.teams.map(t => ({ id: t.id, n: t.name, ovr: t.game.ovr, v: t.squadValue, lg: t.league, ...(t.rating ? { cr: t.rating.score } : {}) })) }
 }
 export const saveSnapshot = (s: Snapshot) => tx('snapshots', 'readwrite', st => st.put(recordedSnapshot(s)))
 export const saveWithFile = (s: Snapshot, data: ArrayBuffer) => transact(['snapshots', 'files'], 'readwrite', t => {
@@ -93,7 +94,7 @@ export function validateBundle(value: unknown): { game: Game; snapshots: Snapsho
     ids.add(s.id)
     const playerIds = new Set<number>()
     for (const p of s.players) { if (!p || !['id','ovr','pot','t','g'].every(k => num(p[k])) || !['age','v'].every(k => p[k] === null || num(p[k])) || (p.birth !== undefined && !str(p.birth)) || (p.contract !== undefined && p.contract !== null && !num(p.contract)) || !['n','pos','team'].every(k => str(p[k])) || playerIds.has(p.id)) throw new Error('Invalid player in export.'); playerIds.add(p.id) }
-    for (const t of s.teams) if (!t || !['id','ovr'].every(k => num(t[k])) || !(t.v === null || num(t.v)) || !['n','lg'].every(k => str(t[k]))) throw new Error('Invalid club in export.')
+    for (const t of s.teams) if (!t || !['id','ovr'].every(k => num(t[k])) || (t.cr !== undefined && !num(t.cr)) || !(t.v === null || num(t.v)) || !['n','lg'].every(k => str(t[k]))) throw new Error('Invalid club in export.')
   }
   const fileIds = new Set<string>()
   for (const f of x.files) { if (!f || !ids.has(f.id) || fileIds.has(f.id) || !str(f.name) || !str(f.data)) throw new Error('Invalid saved file in export.'); fileIds.add(f.id) }

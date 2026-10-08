@@ -139,3 +139,30 @@ Your scouted academy players are stored like normal players but sit in a club na
 The save stores each player's roles in `players.role1`-`role5`. There is no name table, so the mapping in `src/roles.ts` was reverse-engineered: the ID space is position-scoped in the order EA lists each position's roles (GK 1-2, RB 3-6, LB 7-10, CB 11-13, CDM 14-17, CM 18-22, RM 23-26, LM 27-30, CAM 31-34, RW 35-37, LW 38-40, ST 41-44), with FC 26's four new roles appended: 45 Ball-Playing Keeper, 46/47 Inverted Wingback, 48 Wide Back, 49 Box Crasher. A stored value of ID + 100 means the role is held at ++ rather than +; this was confirmed against the players EA named as ++ examples (Alisson and Maignan Ball-Playing Keeper++, Rice Box Crasher++, Tomori and Pavard Wide Back+, Lewis-Skelly Inverted Wingback+). 263 players in a test save hold a ++ role, matching EA's "reserved for the best-of-the-best".
 
 Roles are fused with the attribute archetype: the role supplies the tactical noun and the archetype the qualifier, so Yamal reads "Wide-Creative Inside Forward" and Mbappe "Deep-Dropping Advanced Forward". When the qualifier would restate the role it is dropped (no "Playmaking Playmaker"). The fused name is what rosters, search and the profile show; the profile also lists every role the game gives him with its + / ++ familiarity, and search can filter by role and narrow to ++ only.
+
+## Player careers
+
+Player Career saves (`CmPlr...`) open on a **My player** hub instead of My club; everything else in the app (My club, leagues, search, market, transfers, snapshots) stays fully available, so the club side still works as a manager view, which is handy when running the club through Live Editor.
+
+Detection uses the data, not the filename: `career_users.usertype` is 1 for a player career. That table holds your name, club and wage but not your player ID, so the app finds you by matching the name in `editedplayernames` (where a created player's name lives), confirmed against `career_playercontract` (same club, same wage); if the name lookup fails, a unique contract at your club with your wage is used.
+
+The hub shows:
+- **You**: rating, potential, growth still to come, classification, world rank in your position group, archetype/roles, value, wage, contract, squad slot, time at club, agent, and a button to the full profile.
+- **Your spot in the squad**: teammates whose primary position is yours, in rank order, with where you sit and the gap to the starter, plus your place among the squad's players in your position group.
+- **Road to the top**: the overall currently held by the #1, #10, #30 and #100 players in your group (World's Best, World-Class, Elite, Top 100) and how far you are from each, plus how your potential ranks among players your age.
+- **Clubs that could use you**: the suitors panel, pointed at your own player.
+- **Teammates**: the full squad with your row highlighted.
+- **Your timeline** across the saves in this game.
+
+A freshly created player has no FC IQ roles in the save until the game assigns them, so the archetype falls back to the attribute-based label until then.
+
+## Squad rating (our own team overall and stars)
+
+The game's stored team overall is only recalculated at certain moments (a new season, saving the team sheet), so a club that has signed or grown several 85–90 players can still show 74 and 3½ stars. The Companion rebuilds every club's rating from its players on each load (`src/teamrating.ts`):
+
+1. **Strongest XI** – ten formations are tried (4-3-3, 4-2-3-1, 4-4-2, 4-1-2-1-2, 4-2-2-2, 4-1-4-1, 3-5-2, 3-4-3, 3-4-2-1, 5-3-2). Players are assigned optimally so nobody is used twice. Main position = full rating, listed secondary −1, neighbouring role −4 (LM↔LW, CM↔CDM…), anywhere else −12; keepers only keep goal; an empty slot counts as 50.
+2. **Core** 75% – average of that XI.
+3. **Star power** 15% – average of the best three in the XI.
+4. **Depth** 10% – average of the best seven left on the bench.
+
+Stars: 5 from 85.5, 4½ from 81.5, 4 from 77.5, 3½ from 73.5, 3 from 71, 2½ from 69, 2 from 67, 1½ from 65, 1 from 62.5. The thresholds were set so the number of clubs at each star level roughly matches the game; after that they follow the squad. The scale is ~3 points above the game's own (it is a straight average of the players), so the club page shows both figures, plus world and league rank and a "How it's rated" breakdown of the XI and the formula. League tables gain an **In-game** column. Snapshots store both numbers (`cr` = Companion rating); comparisons use it when both saves have it.

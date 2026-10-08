@@ -1,3 +1,4 @@
+import { rateTeam, type TeamRating } from './teamrating'
 import type { Row } from './parser'
 import { rawScores, groupStats, finalize, type ArchetypeResult } from './archetypes'
 import { decodeRoles, type PlayerRole } from './roles'
@@ -69,11 +70,20 @@ export interface Team {
   stars: number; leagueId: number; league: string; tablePos: number; points: number; played: number; w: number; d: number; l: number; gf: number; ga: number
   prestige: number; intlPrestige: number; founded: number; capacity: number; colors: [string, string, string]
   squadSize: number; avgAge: number; squadValue: number; captainId: number; players: Player[]
+  /** ovr/att/mid/def/stars above are the Companion rating (see teamrating.ts); the game's stored figures live here. */
+  game: { ovr: number; att: number; mid: number; def: number; stars: number }
+  rating?: TeamRating; gk: number
+  /** Companion-rating rank among real league clubs of the same gender, worldwide and in the league. */
+  ratingRank: number; ratingLeagueRank: number
 }
 export interface League { id: number; name: string; intl: boolean; freeAgents?: boolean; level: number; women: boolean; teams: Team[]; avgOvr: number }
 export interface Career {
   manager: string; clubId: number; club?: Team; season: number; asOf: Date; wage: number
   history: Row[]; contracts: Map<number, Row>
+  /** 'player' when career_users.usertype is 1 (a Player Career save), else 'manager'. */
+  mode: 'manager' | 'player'
+  /** In a player career: the player you are. */
+  me?: Player; agent?: string
 }
 export interface YouthPlayer { id: number; name: string; player?: Player; months: number | null; variance: number | null; swing: number | null; tier: number | null; raw: Row }
 export interface TransferEvent { playerId: number; fromId: number; toId: number; date: number; kind: 'transfer' | 'intlRetirement' }
@@ -171,6 +181,8 @@ export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Reco
       gf: l ? (l.homegf as number) + (l.awaygf as number) : 0, ga: l ? (l.homega as number) + (l.awayga as number) : 0,
       prestige: r.domesticprestige as number, intlPrestige: r.internationalprestige as number, founded: r.foundationyear as number, capacity: r.teamstadiumcapacity as number,
       colors: [hex(r.teamcolor1r as number, r.teamcolor1g as number, r.teamcolor1b as number), hex(r.teamcolor2r as number, r.teamcolor2g as number, r.teamcolor2b as number), hex(r.teamcolor3r as number, r.teamcolor3g as number, r.teamcolor3b as number)],
+      game: { ovr: r.overallrating as number, att: r.attackrating as number, mid: r.midfieldrating as number, def: r.defenserating as number, stars: stars(r.overallrating as number) },
+      gk: 0, ratingRank: 0, ratingLeagueRank: 0,
       isSpecial: false, isYouth: false, isFreeAgentPool: false, squadSize: 0, avgAge: 0, squadValue: 0, captainId: r.captainid as number, players: [],
     }
     teams.push(tm); teamById.set(tm.id, tm)
@@ -283,9 +295,25 @@ export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Reco
 
   const u = (t.career_users ?? [])[0] ?? {}
   const club = teamById.get(u.clubteamid as number)
+  const mode: Career['mode'] = (u.usertype as number) === 1 ? 'player' : 'manager'
+  // A player career stores your name, club and wage in career_users but not your player ID.
+  // A created player's name is in editedplayernames; confirm with the contract (same club, same
+  // wage), and fall back to the contract alone if the name lookup fails.
+  let me: Player | undefined
+  if (mode === 'player') {
+    const norm = (s: unknown) => String(s ?? '').trim().toLowerCase()
+    const byName = (t.editedplayernames ?? []).filter(r => norm(r.firstname) === norm(u.firstname) && norm(r.surname) === norm(u.surname) && (!u.commonname || norm(r.commonname) === norm(u.commonname)))
+    const onClub = (id: number) => playerById.get(id)?.teamId === u.clubteamid
+    const cand = byName.map(r => r.playerid as number).filter(onClub)
+    const byWage = (t.career_playercontract ?? []).filter(c => c.teamid === u.clubteamid && c.wage === u.wage).map(c => c.playerid as number)
+    const id = cand.find(i => byWage.includes(i)) ?? cand[0] ?? (byWage.length === 1 ? byWage[0] : undefined)
+    me = id != null ? playerById.get(id) : undefined
+  }
+  const fullName = (u.commonname as string) || [u.firstname, u.surname].filter(Boolean).join(' ')
   const career: Career = {
-    manager: (u.commonname as string) || [u.firstname, u.surname].filter(Boolean).join(' ') || 'Manager', clubId: u.clubteamid as number, club,
+    manager: fullName || (mode === 'player' ? 'Player' : 'Manager'), clubId: u.clubteamid as number, club,
     season: u.seasoncount as number, asOf, wage: u.wage as number, history: (t.career_managerhistory ?? []).slice().sort((a, b) => (a.season as number) - (b.season as number)), contracts,
+    mode, me, agent: (u.agentname as string) || undefined,
   }
   const youth = (t.career_youthplayers ?? []).map(r => {
     const p = playerById.get(Number(r.playerid))
@@ -300,6 +328,22 @@ export function buildWorld(t: Record<string, Row[]>, names: Names, nations: Reco
     tm.avgAge = tm.players.length ? +(tm.players.reduce((s, p) => s + p.age, 0) / tm.players.length).toFixed(1) : 0
     tm.squadValue = tm.players.reduce((s, p) => s + p.value, 0)
   }
+  // Companion rating: rebuilt from the players on every load (the game's stored rating lags).
+  for (const tm of teams) {
+    if (tm.players.length < 11) continue
+    const r = rateTeam(tm.players)
+    tm.rating = r; tm.ovr = Math.round(r.score); tm.stars = r.stars
+    tm.att = r.lines.ATT; tm.mid = r.lines.MID; tm.def = r.lines.DEF; tm.gk = r.lines.GK
+  }
+  const byScore = (a: Team, b: Team) => (b.rating?.score ?? b.ovr) - (a.rating?.score ?? a.ovr) || a.id - b.id
+  const rated = teams.filter(tm => tm.rating && !tm.isSpecial && !tm.isYouth && !tm.isFreeAgentPool && tm.leagueId >= 0 && !intl.has(tm.leagueId))
+  for (const g of [0, 1]) rated.filter(tm => tm.gender === g).sort(byScore).forEach((tm, i) => { tm.ratingRank = i + 1 })
+  for (const lg of leagues) {
+    lg.teams.slice().sort(byScore).forEach((tm, i) => { tm.ratingLeagueRank = i + 1 })
+    lg.teams.sort((a, b) => (a.tablePos || 99) - (b.tablePos || 99) || byScore(a, b))
+    lg.avgOvr = +(lg.teams.reduce((s, x) => s + (x.rating?.score ?? x.ovr), 0) / lg.teams.length).toFixed(1)
+  }
+  leagues.sort((a, b) => Number(a.intl) - Number(b.intl) || b.avgOvr - a.avgOvr)
   for (const y of youth) if (y.player) { y.player.team = `${club?.name ?? 'My club'} · Youth`; y.player.teamId = club?.id ?? -1 }
   // The game's own news rows, a short rolling window. eventid 5 = club transfer: team1 is the club
   // left and team2 the club joined (verified against where each player actually is in the save).
