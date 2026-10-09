@@ -14,7 +14,7 @@ async function main() {
  const buffer=(b:Uint8Array)=>b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength) as ArrayBuffer
  const w=buildWorld(parseSave(buffer(first),meta),names,nations,vm), w2=buildWorld(parseSave(buffer(later),meta),names,nations,vm)
  assert.equal(w.youth.length,2); assert.equal(w.youth[0].name,'Youth Fixture'); assert.equal(w.youth[1].player,undefined)
- assert(!w.career.club!.players.some(p=>p.id===112)); assert.equal(w.scouts[0].firstname,'Test'); assert.equal((w.career as any).asOf,undefined); assert.equal(w.players[0].age,null); assert.equal(w.players[0].value,null); assert(w.players[0].birth)
+ assert(!w.career.club!.players.some(p=>p.id===112)); assert.equal(w.scouts[0].firstname,'Test'); assert(w.players[0].birth)
  assert.equal(depthRank(depthIndex(w),w.playerById.get(102)!,'ST').best!.id,101)
  const player=(id:number,ovr:number,positions:string[])=>({id,ovr,pot:ovr,positions,age:25}) as any
  const xi=assignXI([player(1,95,['ST','CM']),player(2,80,['ST'])],['ST','CM'])

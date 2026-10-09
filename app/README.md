@@ -103,4 +103,75 @@ Players whose name ID isn't in the bundled pool show as *Unknown #id* with a pen
 
 ## Clubs that could use this player
 
-Each player profile lists clubs where he would be an upgrade: for every club of the chosen calibre, the app finds their best option at each of the player's positions and keeps the club when that incumbent is weaker (or the slot is empty). Results are ordered by club rating, since a place at a stronger club matters more than the size of the gap, and show the incumbent's rating and age plus a "younger" flag when the player is at least four years younger. Filters: minimum club stars (5, 4.5, 4 or 3 stars), all leagues or the player's own league, and whether to consider secondary positions. Clicking a row opens that club. Women's and men's clubs are matched separately.
+Each player profile has a jump bar under the bio (Archetype / Clubs that could use him / Attributes / History); the clubs section sits directly below the archetype card and sits as a collapsed bar; click it to expand (nothing is computed until then). It lists clubs where he would be an upgrade: for every club of the chosen calibre, the app finds the player who holds the slot as his *primary* position and keeps the club when he is weaker. Only the player's own primary position is used unless "Also his secondary positions" is ticked, and even then the club's incumbent is always the man who plays there as his primary; if a club has nobody there, the best player who lists it as a secondary is shown as covering the slot. Icon, academy and free-agent placeholder squads are excluded — these are flagged on the club itself (`isSpecial`, `isYouth`, `isFreeAgentPool`) from the league they sit in, so they stay excluded even when their rosters are empty or change between saves. Results are ordered by club rating, since a place at a stronger club matters more than the size of the gap, and show the incumbent's rating and age plus a "younger" flag when the player is at least four years younger. Filters: minimum club stars (5, 4.5, 4 or 3 stars), all leagues or the player's own league, and whether to consider secondary positions. Clicking a row opens that club. Women's and men's clubs are matched separately.
+
+## Time at club
+
+The save stores each player's join date (`playerjointeamdate`), so the profile shows "At club since" with the date and how long that is as of the save's date ("1 yr 11 mo", "Just signed"). Rosters and search show the tenure under the contract year, with the exact date on hover. Loans keep the date of the loan move, which is what the game records.
+
+## Transfers
+
+A dedicated page combining two sources, so nothing is missed:
+
+1. **The game's own news rows** (`persistent_events`, eventid 5) — club-to-club moves with the exact date the game recorded. In these rows `team1id` is the club left and `team2id` the club joined, verified by checking the destination against where each player actually sits in the save. This is a short rolling window, so it only covers recent transfers, and it never contains edits made outside the game. (eventid 1 in the same table is an international retirement, not a club release, so it is excluded.)
+2. **Squad diffs between the saves in the game** — any player whose club changed between two imported saves. This catches everything, including transfers made in Live Editor, which the game never logs.
+
+Rows are matched between the two: when a squad change lines up with a news row it shows the exact date; otherwise it shows the pair of saves it happened between and is marked "not in game news" — which is what a manual Live Editor move looks like. By default only the newest window is shown, i.e. the changes since the previous save, so transfers you have already reviewed do not pile up with each import; the window selector switches to the whole career or any earlier pair of saves. Club names are tinted with each club's own kit colour (nudged for contrast in light and dark mode) so the two sides of a move read apart. Sort by overall (default), most recent or value; filter by minimum overall, position or group, club (both directions), men/women, and optionally show only moves the game logged. Click a row for the player, or a club name to open it.
+
+## Market finder
+
+Five ready-made searches, each a button at the top of the page:
+
+- **Expiring contracts** — deals ending this season (measured against the save's own date, contracts running to 30 June) at clubs of 4 stars or better; wage shown where the save holds it.
+- **Free agents** — the game keeps these in a "Free Agents League" placeholder club rather than with no club at all, so they are detected by that league and shown as "Free agent".
+- **Hidden gems** — at least +5 potential still to come, 23 or younger, at clubs of 3.5 stars or less.
+- **Value drops** — worth less than in the previous save in this game, sorted by how much they lost. Needs two saves imported.
+- **Blocked talent** — 24 or younger with someone at their own club more than 2 overall better at the same *primary* position, so they may want out. Primary is compared to primary throughout: a better winger who happens to list the position as a secondary is not treated as blocking anyone.
+
+All five share filters for men/women, position or group, minimum overall and potential, maximum age, and the club-calibre threshold where it applies. Icons, 5v5 and Look Book placeholder squads are excluded everywhere (flagged on each player as `isSpecial`), and free agents as `isFreeAgent`.
+
+## Youth academy players
+
+Your scouted academy players are stored like normal players but sit in a club named "Youth Squad [DO NOT USE]" in a "Youth Squad League". They are flagged as `isYouth` (by that club, that league, or membership of `career_youthplayers`) and kept out of the market finder, player search, transfers and the world rankings — they aren't signable and would otherwise appear as free transfers or hidden gems. They remain visible where they belong: the Youth tab on your club page.
+
+## Player roles (FC IQ)
+
+The save stores each player's roles in `players.role1`-`role5`. There is no name table, so the mapping in `src/roles.ts` was reverse-engineered: the ID space is position-scoped in the order EA lists each position's roles (GK 1-2, RB 3-6, LB 7-10, CB 11-13, CDM 14-17, CM 18-22, RM 23-26, LM 27-30, CAM 31-34, RW 35-37, LW 38-40, ST 41-44), with FC 26's four new roles appended: 45 Ball-Playing Keeper, 46/47 Inverted Wingback, 48 Wide Back, 49 Box Crasher. A stored value of ID + 100 means the role is held at ++ rather than +; this was confirmed against the players EA named as ++ examples (Alisson and Maignan Ball-Playing Keeper++, Rice Box Crasher++, Tomori and Pavard Wide Back+, Lewis-Skelly Inverted Wingback+). 263 players in a test save hold a ++ role, matching EA's "reserved for the best-of-the-best".
+
+Roles are fused with the attribute archetype: the role supplies the tactical noun and the archetype the qualifier, so Yamal reads "Wide-Creative Inside Forward" and Mbappe "Deep-Dropping Advanced Forward". When the qualifier would restate the role it is dropped (no "Playmaking Playmaker"). The fused name is what rosters, search and the profile show; the profile also lists every role the game gives him with its + / ++ familiarity, and search can filter by role and narrow to ++ only.
+
+## Player careers
+
+Player Career saves (`CmPlr...`) open on a **My player** hub instead of My club; everything else in the app (My club, leagues, search, market, transfers, snapshots) stays fully available, so the club side still works as a manager view, which is handy when running the club through Live Editor.
+
+Detection uses the data, not the filename: `career_users.usertype` is 1 for a player career. That table holds your name, club and wage but not your player ID, so the app finds you by matching the name in `editedplayernames` (where a created player's name lives), confirmed against `career_playercontract` (same club, same wage); if the name lookup fails, a unique contract at your club with your wage is used.
+
+The hub shows:
+- **You**: rating, potential, growth still to come, classification, world rank in your position group, archetype/roles, value, wage, contract, squad slot, time at club, agent, and a button to the full profile.
+- **Your spot in the squad**: teammates whose primary position is yours, in rank order, with where you sit and the gap to the starter, plus your place among the squad's players in your position group.
+- **Road to the top**: the overall currently held by the #1, #10, #30 and #100 players in your group (World's Best, World-Class, Elite, Top 100) and how far you are from each, plus how your potential ranks among players your age.
+- **Clubs that could use you**: the suitors panel, pointed at your own player.
+- **Teammates**: the full squad with your row highlighted.
+- **Your timeline** across the saves in this game.
+
+A freshly created player has no FC IQ roles in the save until the game assigns them, so the archetype falls back to the attribute-based label until then.
+
+## Squad rating (our own team overall and stars)
+
+The game's stored team overall is only recalculated at certain moments (a new season, saving the team sheet), so a club that has signed or grown several 85–90 players can still show 74 and 3½ stars. The Companion rebuilds every club's rating from its players on each load (`src/teamrating.ts`):
+
+1. **Strongest XI** – ten formations are tried (4-3-3, 4-2-3-1, 4-4-2, 4-1-2-1-2, 4-2-2-2, 4-1-4-1, 3-5-2, 3-4-3, 3-4-2-1, 5-3-2). Players are assigned optimally so nobody is used twice. Main position = full rating, listed secondary −1, neighbouring role −4 (LM↔LW, CM↔CDM…), anywhere else −12; keepers only keep goal; an empty slot counts as 50.
+2. **Core** 75% – average of that XI.
+3. **Star power** 15% – average of the best three in the XI.
+4. **Depth** 10% – average of the best seven left on the bench.
+
+Stars: 5 from 85.5, 4½ from 81.5, 4 from 77.5, 3½ from 73.5, 3 from 71, 2½ from 69, 2 from 67, 1½ from 65, 1 from 62.5. The thresholds were set so the number of clubs at each star level roughly matches the game; after that they follow the squad. The scale is ~3 points above the game's own (it is a straight average of the players), so the club page shows both figures, plus world and league rank and a "How it's rated" breakdown of the XI and the formula. League tables gain an **In-game** column. Snapshots store both numbers (`cr` = Companion rating); comparisons use it when both saves have it.
+
+## Strongest clubs
+
+A world ranking of every real league club by squad rating (`src/Rankings.tsx`), with a men/women switch, a league filter and Top 25/50/100/All.
+- **Star tiers:** tiles at the top count how many clubs sit at each star level, and clicking one filters to that tier. The list is split under star-tier headings.
+- **Podium:** the top three get cards with rating, stars, ATT/MID/DEF/GK lines and their three star players.
+- **List rows:** every row shows the club's three best players as chips (click one to open the player).
+- **Your club:** highlighted, with its rank in the bar.
+- **Movement:** snapshots now store each club's world rank (`rk`), so later saves show ▲/▼ rank movement and the change in rating against the previous save.

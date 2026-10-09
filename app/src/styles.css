@@ -530,8 +530,150 @@ details.adv .note { font-size: 12px; color: var(--ink-3); margin: 8px 0 0; }
 .pencil { background: none; border: 1px solid var(--line); color: var(--ink-3); font-size: 11px; line-height: 1; padding: 2px 5px; margin-left: 6px; cursor: pointer; vertical-align: middle; transition: color .16s, border-color .16s; }
 .pencil:hover { color: var(--club); border-color: var(--club); }
 h1 .pencil { font-size: 14px; padding: 3px 7px; margin: 0 8px 0 0; vertical-align: middle; }
+
+/* clubs that could use him — disclosure */
 .suitors { margin: 18px 0 4px; }
-.suitors .bar { flex-wrap: wrap; }
-.suitors .arch-kicker { font-size: 11.5px; }
-.suitors .chk { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); }
-.suitors .tag { margin-left: 6px; }
+.suitors .disclose { display: flex; width: 100%; align-items: center; gap: 10px; background: var(--surface-2); border: 1px solid var(--line); padding: 12px 14px; text-align: left; transition: border-color .18s, background .18s; }
+.suitors .disclose:hover { border-color: var(--club); }
+.suitors .disclose .caret { color: var(--ink-3); font-size: 11px; transition: transform .2s var(--ease); }
+.suitors .disclose[aria-expanded=true] .caret { transform: rotate(90deg); }
+.suitors .disclose-title { font-family: var(--display); font-weight: 800; font-size: 15px; letter-spacing: -.01em; }
+.suitors .disclose-hint { margin-left: auto; font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.suitors-body { border: 1px solid var(--line); border-top: 0; padding: 14px; }
+.suitors .filters { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-end; margin-bottom: 12px; }
+.suitors .filters > label { display: flex; flex-direction: column; gap: 5px; }
+.suitors .filters > label > span { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.suitors .filters .seg button { padding: 6px 11px; }
+.suitors .filters .chk { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); height: 32px; }
+.suitors .tbl td, .suitors .tbl th { vertical-align: middle; }
+.suitors .stars-cell { white-space: nowrap; }
+.suitors .incumbent { display: block; line-height: 1.25; }
+.suitors .incumbent small { display: block; font-size: 11px; color: var(--ink-3); }
+.suitors .trend { margin: 0; font-size: 13px; }
+.tbl td.when-cell { white-space: nowrap; line-height: 1.25; }
+.tbl td.when-cell small { display: block; font-size: 10.5px; color: var(--ink-3); }
+.club-link { font-weight: 600; text-decoration: none; }
+.club-link:hover { text-decoration: underline; }
+
+/* market finder lenses */
+.lens-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin: 0 0 16px; }
+.lens { text-align: left; background: var(--surface); border: 1px solid var(--line); padding: 12px 14px; transition: border-color .18s, background .18s, transform .18s var(--ease); }
+.lens:hover { border-color: var(--club); transform: translateY(-2px); }
+.lens.on { border-color: var(--club); background: var(--club-tint); }
+.lens b { display: block; font-family: var(--display); font-size: 15px; font-weight: 800; letter-spacing: -.01em; margin-bottom: 3px; }
+.lens span { font-size: 11.5px; color: var(--ink-2); line-height: 1.35; display: block; }
+.lens.on b { color: var(--club); }
+@media (prefers-reduced-motion: reduce) { .lens:hover { transform: none; } }
+
+/* player roles */
+.arch-main .roles { margin-top: 12px; }
+.tag.role { margin: 0; font-weight: 700; font-size: 11px; background: var(--surface); border-color: var(--line); }
+.tag.role em { font-style: normal; margin-left: 4px; font-weight: 800; }
+.tag.role.rpp { border-color: var(--club); color: var(--club); background: var(--club-tint); }
+.tag.role.rp { color: var(--ink-2); }
+.tbl td.arch-cell small { text-transform: none; }
+
+/* player career hub */
+.me-hero { display: grid; grid-template-columns: auto 1fr; gap: 26px; align-items: start; border-bottom: 2px solid var(--line); padding-bottom: 22px; margin-bottom: 22px; }
+.me-card { width: 150px; padding: 18px 14px; text-align: center; color: var(--club-ink); background: var(--club); animation: fcPop .4s var(--ease) both; }
+.me-card .o { font-family: var(--display); font-weight: 800; font-size: 72px; line-height: .9; }
+.me-card .p { font-family: var(--display); font-weight: 800; font-size: 22px; margin-top: 4px; }
+.me-card .pot { font-size: 12px; opacity: .85; margin-top: 4px; }
+.me-main h1 { margin: 2px 0 6px; }
+.me-main .meta { color: var(--ink-2); }
+.me-standing { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 12px 0 4px; font-size: 13px; font-weight: 700; }
+.me-standing .dim { font-weight: 400; }
+.me-main .facts { margin: 14px 0 16px; }
+.me-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; align-items: start; margin-bottom: 8px; }
+.me-panel h2 { margin-top: 0; }
+.milestones { display: grid; gap: 8px; }
+.ms { display: grid; grid-template-columns: 1fr auto auto; gap: 14px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); background: var(--surface); }
+.ms span { font-weight: 700; }
+.ms b { font-family: var(--display); font-weight: 800; }
+.ms em { font-style: normal; font-size: 12px; color: var(--ink-3); min-width: 150px; text-align: right; }
+.ms em.ok { color: #1f7a48; }
+.tbl tr.me td { background: var(--club-tint); font-weight: 700; }
+@media (max-width: 900px) { .me-grid, .me-hero { grid-template-columns: 1fr; } }
+
+/* v30 — Companion squad rating */
+.club-head .rating-line { margin-top: 6px; font-size: 13px; color: var(--ink-2); display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; }
+.club-head .rating-line b { color: var(--ink); }
+.club-head .rating-line .stars { font-size: 12px; color: var(--ink-3); }
+.how-btn { margin-left: 6px; font-size: 12px; font-weight: 600; color: var(--club); text-decoration: underline; text-underline-offset: 3px; }
+.rating-break { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr); gap: 24px 40px; padding: 4px 0 24px; }
+@media (max-width: 860px) { .rating-break { grid-template-columns: 1fr; } }
+.rating-break h3 { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 12px; font-weight: 700; }
+.rb-line { display: flex; gap: 12px; align-items: stretch; padding: 8px 0; border-top: 1px solid var(--line-soft); }
+.rb-tag { flex: 0 0 52px; display: flex; flex-direction: column; font-size: 10px; letter-spacing: .12em; color: var(--ink-3); font-weight: 700; }
+.rb-tag b { font-family: var(--display); font-size: 22px; color: var(--ink); letter-spacing: -.02em; }
+.rb-slots { flex: 1; display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
+.rb-slot { background: var(--surface-2); border-radius: 8px; padding: 6px 9px; display: flex; flex-direction: column; min-width: 0; border-left: 3px solid var(--club); animation: fcUp .35s ease-out both; }
+.rb-slot small { font-size: 10px; letter-spacing: .1em; color: var(--ink-3); font-weight: 700; }
+.rb-slot b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rb-slot span { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.rb-slot span i { font-style: normal; color: var(--ink-3); }
+.rb-slot.fit-secondary { border-left-color: var(--gold); }
+.rb-slot.fit-adapted, .rb-slot.fit-out { border-left-color: var(--red); }
+.rb-slot.fit-empty { border-left-color: var(--line); opacity: .6; }
+.rb-bench { font-size: 12px; margin: 10px 0 0; }
+.rb-row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: baseline; padding: 9px 0; border-top: 1px solid var(--line-soft); }
+.rb-row span { font-weight: 600; font-size: 14px; }
+.rb-row span small { display: block; font-weight: 400; font-size: 12px; color: var(--ink-3); }
+.rb-row b { font-family: var(--display); font-size: 22px; font-variant-numeric: tabular-nums; }
+.rb-row em { font-style: normal; color: var(--ink-3); font-size: 12px; text-align: right; white-space: nowrap; min-width: 48px; }
+.rb-row.total { border-top: 2px solid var(--ink); }
+.rb-row.total b { font-size: 28px; color: var(--club); }
+.rb-sum p { font-size: 12px; line-height: 1.55; margin-top: 12px; }
+
+/* v31 — Strongest clubs */
+.tierbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: 6px; margin: 4px 0 28px; }
+.tierbar button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; padding: 9px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius, 8px); cursor: pointer; color: var(--ink); text-align: left; transition: border-color .15s, transform .15s, background .15s; }
+.tierbar button:hover { border-color: var(--club); transform: translateY(-1px); }
+.tierbar button.on { border-color: var(--club); background: var(--club-tint); box-shadow: inset 0 0 0 1px var(--club); }
+.tierbar button b { font-family: var(--display); font-size: 22px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.tierbar button span:not(.stars) { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+.tierbar .stars { font-size: 12px; }
+.podium { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: end; margin-bottom: 32px; }
+.pod { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 0 20px 18px; cursor: pointer; overflow: hidden; animation: fcUp .45s ease-out both; transition: transform .2s, box-shadow .2s; }
+.pod:hover { transform: translateY(-3px); box-shadow: 0 10px 28px rgba(0,0,0,.12); }
+.pod.mine { box-shadow: inset 0 0 0 2px var(--club); }
+.pod-1 { order: 2; padding-top: 10px; } .pod-2 { order: 1; } .pod-3 { order: 3; }
+.pod-stripe { display: flex; height: 6px; margin: 0 -20px 16px; } .pod-stripe i { flex: 1; }
+.pod-1 .pod-stripe { height: 10px; margin-top: -10px; }
+.pod-top { display: flex; justify-content: space-between; align-items: flex-start; }
+.pod-rank { font-family: var(--display); font-size: 56px; font-weight: 800; line-height: .85; letter-spacing: -.04em; color: var(--ink-3); }
+.pod-1 .pod-rank { font-size: 76px; color: var(--gold); }
+.pod-rank .trend { font-size: 12px; letter-spacing: 0; vertical-align: top; }
+.pod h2 { font-size: 22px; margin: 12px 0 0; line-height: 1.1; }
+.pod-1 h2 { font-size: 26px; }
+.pod > p { font-size: 12px; margin: 2px 0 12px; }
+.pod-score { display: flex; align-items: baseline; gap: 10px; }
+.pod-score b { font-family: var(--display); font-size: 40px; font-weight: 800; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.pod-1 .pod-score b { font-size: 48px; }
+.pod-score .stars { font-size: 18px; }
+.pod-lines { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); margin: 10px 0 14px; }
+.pod-lines span { padding: 7px 0; font-weight: 800; font-size: 17px; font-variant-numeric: tabular-nums; }
+.pod-lines small { display: block; font-size: 9.5px; letter-spacing: .12em; color: var(--ink-3); font-weight: 700; }
+.pod h3 { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 8px; }
+.sp-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.sp-list.big { flex-direction: column; flex-wrap: nowrap; }
+.sp { display: inline-flex; align-items: center; gap: 7px; background: var(--surface-2); border: 0; border-radius: 999px; padding: 3px 10px 3px 3px; font: inherit; font-size: 12.5px; color: var(--ink); cursor: pointer; white-space: nowrap; max-width: 100%; transition: background .15s; }
+.sp:hover { background: var(--hover); }
+.sp .pos { font-size: 9.5px; padding: 1px 4px; }
+.sp-ovr { display: inline-grid; place-items: center; min-width: 26px; height: 22px; border-radius: 999px; background: var(--club); color: var(--club-ink); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.sp-name { overflow: hidden; text-overflow: ellipsis; }
+.sp-list.big .sp { border-radius: 8px; padding: 5px 10px 5px 5px; font-size: 14px; }
+.sp-list.big .sp-name { flex: 1; text-align: left; font-weight: 600; }
+.sp-list.big .sp-ovr { border-radius: 6px; height: 26px; min-width: 32px; font-size: 13px; }
+.tbl.power tr.tier-row td { background: transparent; padding-top: 22px; border-bottom: 2px solid var(--ink); font-size: 13px; }
+.tbl.power tr.tier-row .stars { font-size: 15px; margin-right: 4px; }
+.tbl.power td .trend { display: inline; margin-left: 3px; }
+.trend.flat { color: var(--ink-3); }
+@media (max-width: 860px) {
+  .podium { grid-template-columns: 1fr; }
+  .pod-1, .pod-2, .pod-3 { order: 0; }
+}
+
+.tbl.power .sp-list { flex-wrap: nowrap; }
+.tbl.power .sp { padding-right: 8px; gap: 5px; }
+.tbl.power .sp .pos { display: none; }

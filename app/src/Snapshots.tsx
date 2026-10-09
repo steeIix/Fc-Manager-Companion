@@ -61,7 +61,12 @@ function Compare({ A, B, pick }: { A: Snapshot; B: Snapshot; pick: (id: number) 
     const newPlayers = Y.players.filter(p => !xm.has(p.id) && (gender === 'all' || p.g === gender)).sort((p, q) => q.pot - p.pot).slice(0, 15)
     const gone = X.players.filter(p => !ym.has(p.id) && (gender === 'all' || p.g === gender)).sort((p, q) => q.ovr - p.ovr).slice(0, 15)
     const tx = new Map(X.teams.map(t => [t.id, t]))
-    const teams = Y.teams.map(t => ({ t, o: tx.get(t.id) })).filter(r => r.o && r.t.ovr !== r.o!.ovr).map(r => ({ ...r, d: r.t.ovr - r.o!.ovr })).sort((p, q) => q.d - p.d)
+    // Compare Companion ratings when both snapshots have them; older snapshots only stored the game's figure.
+    const teams = Y.teams.map(t => ({ t, o: tx.get(t.id) })).filter(r => r.o).map(r => {
+      const cr = r.t.cr != null && r.o!.cr != null
+      const was = cr ? r.o!.cr! : r.o!.ovr, now = cr ? r.t.cr! : r.t.ovr
+      return { ...r, was, now, d: Math.round((now - was) * 10) / 10 }
+    }).filter(r => Math.abs(r.d) >= (r.t.cr != null && r.o!.cr != null ? 0.5 : 1)).sort((p, q) => q.d - p.d)
     const clubX = X.players.filter(p => p.t === clubId), clubY = Y.players.filter(p => p.t === clubId)
     const yIds = new Set(clubY.map(p => p.id)), xIds = new Set(clubX.map(p => p.id))
     const left = clubX.filter(p => !yIds.has(p.id)).map(p => ({ p, now: ym.get(p.id) })).sort((a, b) => b.p.ovr - a.p.ovr)
@@ -118,7 +123,7 @@ function Compare({ A, B, pick }: { A: Snapshot; B: Snapshot; pick: (id: number) 
 
     {data.teams.length > 0 && <><h2>Club ratings that moved</h2>
       <Table className="tbl"><thead><tr><th>Club</th><th>League</th><th className="num">Overall</th><th className="num">Δ</th></tr></thead><tbody>
-        {data.teams.slice(0, 15).concat(data.teams.length > 30 ? data.teams.slice(-15) : []).map(r => <tr key={r.t.id}><td className="name">{r.t.n}</td><td className="dim">{r.t.lg}</td><td className="num"><Rating v={r.o!.ovr} /> → <Rating v={r.t.ovr} /></td><td className="num"><Delta d={r.d} /></td></tr>)}
+        {data.teams.slice(0, 15).concat(data.teams.length > 30 ? data.teams.slice(-15) : []).map(r => <tr key={r.t.id}><td className="name">{r.t.n}</td><td className="dim">{r.t.lg}</td><td className="num"><Rating v={Math.round(r.was)} /> → <Rating v={Math.round(r.now)} /></td><td className="num"><Delta d={r.d} /></td></tr>)}
       </tbody></Table></>}
   </>
 }

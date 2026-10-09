@@ -2,12 +2,16 @@ import { Table } from './Table'
 import React, { Fragment, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { parseSave, isCareerSave, type Meta } from './parser'
 import { Snapshots } from './Snapshots'
+import { Transfers } from './Transfers'
+import { Market } from './Market'
+import { Rankings } from './Rankings'
 import { fromWorld, saveWithFile, getSnapshot, getSavedFile, saveSnapshot, allSnapshots, setHistoryPosition, recoverFinish, historyKey, type HistoryFinish, listGames, toggleTarget, type Game } from './snapshots'
 import { Games, Timeline, Youth, Planner, Shortlist } from './Features'
 import { depthIndex, opportunity, lineupIndex, inSavedXI, suitors } from './planning'
 import { ARCHETYPES, GROUP_LABEL, archetypeBlurb, type Group } from './archetypes'
+import { ROLE_NAMES } from './roles'
 import { Logo, logosEnabled, setLogosEnabled } from './Logo'
-import type { PSnap } from './snapshots'
+import type { PSnap, TSnap } from './snapshots'
 import { loadOverrides, setOverride } from './names'
 import { buildWorld, fmtMoney, fmtDate, posGroup, rankGroupOf, rankOrder, seasonLabel, POS_LONG, GROUP_SHORT, GROUP_PLURAL, GROUP_LONG, POS_ORDER, POS_GROUPS, matchesPos, ATTR_GROUPS, ATTR_LABEL, type World, type Player, type Team, type League, type Names, type ValueModel } from './model'
 
@@ -58,7 +62,7 @@ function ClubSwitcher({ world, viewed, go }: { world: World; viewed?: Team; go: 
 }
 
 // Previous save in the same game, for ▲/▼ deltas.
-type Prev = { map: Map<number, PSnap>; label: string } | null
+type Prev = { map: Map<number, PSnap>; teams: Map<number, TSnap>; label: string } | null
 const PrevCtx = createContext<Prev>(null)
 function usePrevSnapshot(gameId: string | undefined, currentId: string | undefined, tick: number): Prev {
   const [prev, setPrev] = useState<Prev>(null)
@@ -70,7 +74,7 @@ function usePrevSnapshot(gameId: string | undefined, currentId: string | undefin
       const sorted = all.slice().sort((x, y) => (x.order ?? 0) - (y.order ?? 0))
       const i = sorted.findIndex(s => s.id === currentId)
       const p = i > 0 ? sorted[i - 1] : (currentId ? null : sorted[sorted.length - 1])
-      setPrev(p ? { map: new Map(p.players.map(x => [x.id, x])), label: `Save ${p.order ?? '?'}${p.label ? ` · ${p.label}` : ''}` } : null)
+      setPrev(p ? { map: new Map(p.players.map(x => [x.id, x])), teams: new Map(p.teams.map(x => [x.id, x])), label: `Save ${p.order ?? '?'}${p.label ? ` · ${p.label}` : ''}` } : null)
     }).catch(() => setPrev(null))
     return () => { live = false }
   }, [gameId, currentId, tick])
@@ -93,7 +97,7 @@ function useTheme() {
 }
 const ThemeButton = ({ t }: { t: { theme: string; toggle: () => void } }) => <button className="theme-btn" onClick={t.toggle} aria-label="Toggle dark mode">{t.theme === 'dark' ? '☀ Light' : '☾ Dark'}</button>
 
-type View = { kind: 'games' } | { kind: 'shortlist' } | { kind: 'snapshots' } | { kind: 'leagues' } | { kind: 'league'; id: number } | { kind: 'club'; id: number } | { kind: 'players' } | { kind: 'my' }
+type View = { kind: 'market' } | { kind: 'transfers' } | { kind: 'games' } | { kind: 'shortlist' } | { kind: 'snapshots' } | { kind: 'leagues' } | { kind: 'league'; id: number } | { kind: 'club'; id: number } | { kind: 'players' } | { kind: 'my' } | { kind: 'me' } | { kind: 'rankings' }
 
 const Rating = ({ v }: { v: number }) => <span className={'rt ' + (v >= 85 ? 'r5' : v >= 78 ? 'r4' : v >= 70 ? 'r3' : v >= 60 ? 'r2' : 'r1')}>{v}</span>
 const Pos = ({ p }: { p: string }) => <span className={'pos ' + posGroup(p).toLowerCase()}>{p}</span>
@@ -156,7 +160,7 @@ export default function App() {
       const w = buildWorld(tables, assets.current!.names, assets.current!.nations, assets.current!.vm, loadOverrides())
       if (existingId) { setSnapId(existingId); if (existing) await saveSnapshot({ ...fromWorld(w, file.name, active.id), id: existing.id, order: existing.order, label: existing.label, savedAt: existing.savedAt }) }
       else { const s = fromWorld(w, file.name, active.id); await saveWithFile(s, buf); setSnapId(s.id); setSnapTick(x => x + 1) }
-      setGame(active); setSel(null); setWorld(w); setFileName(file.name); setView(w.career.club ? { kind: 'my' } : { kind: 'leagues' })
+      setGame(active); setSel(null); setWorld(w); setFileName(file.name); setView(w.career.mode === 'player' && w.career.me ? { kind: 'me' } : w.career.club ? { kind: 'my' } : { kind: 'leagues' })
     } catch (e: any) { setErr(e.message || String(e)) }
     setBusy(''); loadingFile.current = false
   }
@@ -175,14 +179,18 @@ export default function App() {
   return (<PrevCtx.Provider value={prev}><RenameCtx.Provider value={rename}>
     <TargetContext.Provider value={{ ids: game?.shortlist ?? [], toggle }}><div className="shell">
       <aside className="rail">
-        <div className="brand"><small style={{ marginTop: 0, marginBottom: 6 }}>FC26 Companion</small>Manager Desk<small>{fileName}</small></div>
+        <div className="brand"><small style={{ marginTop: 0, marginBottom: 6 }}>FC26 Companion</small>{c.mode === 'player' ? 'Player Desk' : 'Manager Desk'}<small>{fileName}</small></div>
         <ClubSwitcher world={world} viewed={viewedClub ?? undefined} go={id => setView({ kind: 'club', id })} />
         <nav>
           <button className={view.kind === 'games' ? 'on' : ''} onClick={() => setView({ kind: 'games' })}>Games &amp; saves</button>
           <button className={view.kind === 'shortlist' ? 'on' : ''} onClick={() => setView({ kind: 'shortlist' })}>Shortlist ({game?.shortlist.length ?? 0})</button>
+          {c.me && <button className={view.kind === 'me' ? 'on' : ''} onClick={() => setView({ kind: 'me' })}>My player</button>}
           {c.club && <button className={view.kind === 'my' ? 'on' : ''} onClick={() => setView({ kind: 'my' })}>My club</button>}
           <button className={view.kind === 'leagues' || view.kind === 'league' ? 'on' : ''} onClick={() => setView({ kind: 'leagues' })}>Leagues &amp; clubs</button>
+          <button className={view.kind === 'rankings' ? 'on' : ''} onClick={() => setView({ kind: 'rankings' })}>Strongest clubs</button>
           <button className={view.kind === 'players' ? 'on' : ''} onClick={() => setView({ kind: 'players' })}>Player search</button>
+          <button className={view.kind === 'market' ? 'on' : ''} onClick={() => setView({ kind: 'market' })}>Market finder</button>
+          <button className={view.kind === 'transfers' ? 'on' : ''} onClick={() => setView({ kind: 'transfers' })}>Transfers</button>
           <button className={view.kind === 'snapshots' ? 'on' : ''} onClick={() => setView({ kind: 'snapshots' })}>Snapshots &amp; compare</button>
         </nav>
         <div className="foot">{world.players.length.toLocaleString()} players · {world.teams.length} clubs · {world.leagues.length} leagues<br />Values are estimates from the game's rating curve; wages are shown only where the save holds a contract. In-game date is inferred from the latest event in the save.<div style={{ display: 'flex', gap: 8, marginBottom: 12 }}><ThemeButton t={themeCtl} /><button style={{ margin: 0 }} onClick={() => { setWorld(null); setView({ kind: 'leagues' }) }}>New save</button></div><label className="logo-toggle"><input type="checkbox" defaultChecked={logosEnabled()} onChange={e => { setLogosEnabled(e.target.checked); location.reload() }} /> Club crests</label></div>
@@ -194,8 +202,12 @@ export default function App() {
         {view.kind === 'leagues' && <Leagues world={world} open={id => setView({ kind: 'league', id })} />}
         {view.kind === 'league' && <LeagueView league={world.leagues.find(l => l.id === view.id)!} back={() => setView({ kind: 'leagues' })} open={id => setView({ kind: 'club', id })} userClub={c.clubId} pick={setSel} world={world} />}
         {view.kind === 'club' && <ClubView team={world.teamById.get(view.id)!} world={world} back={() => setView({ kind: 'league', id: world.teamById.get(view.id)!.leagueId })} pick={setSel} />}
+        {view.kind === 'rankings' && <Rankings world={world} prevTeams={prev?.teams} prevLabel={prev?.label} openClub={id => setView({ kind: 'club', id })} pick={setSel} />}
         {view.kind === 'players' && <Search world={world} pick={setSel} openClub={id => setView({ kind: 'club', id })} />}
+        {view.kind === 'market' && <Market world={world} prev={prev?.map ?? null} openClub={id => setView({ kind: 'club', id })} pick={setSel} />}
+        {view.kind === 'transfers' && <Transfers world={world} gameId={game?.id} refresh={snapTick} openClub={id => setView({ kind: 'club', id })} pick={id => { const p = world.playerById.get(id); if (p) setSel(p) }} />}
         {view.kind === 'snapshots' && <Snapshots key={game?.id} gameId={game?.id ?? 'legacy'} currentId={snapId} refresh={snapTick} />}
+        {view.kind === 'me' && c.me && <MyPlayer me={c.me} world={world} gameId={game?.id} refresh={snapTick} pick={setSel} openClub={id => setView({ kind: 'club', id })} />}
         {view.kind === 'my' && c.club && <MyClub game={game} onGameChange={setGame} world={world} open={() => setView({ kind: 'club', id: c.club!.id })} pick={setSel} />}
       </main>
       {sel && <PlayerModal gameId={game?.id ?? 'legacy'} refresh={snapTick} p={sel} world={world} close={() => setSel(null)} openClub={id => { setSel(null); setView({ kind: 'club', id }) }} />}
@@ -210,7 +222,7 @@ function DropScreen({ onFile, busy, err }: { onFile: (f: File) => void; busy: st
       <div className={'zone' + (over ? ' over' : '')} onDragOver={e => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
         onDrop={e => { e.preventDefault(); setOver(false); if (busy) return; const f = e.dataTransfer.files[0]; if (f) onFile(f) }}>
         <strong>Drop your career save here</strong>
-        <div>Files are named <span className="path">CmMgrC…</span> or <span className="path">CmMgrP…</span> and live in <span className="path">%LOCALAPPDATA%\EA SPORTS FC 26\settings</span></div>
+        <div>Files are named <span className="path">CmMgrC…</span> (manager career) or <span className="path">CmPlr…</span> (player career) and live in <span className="path">%LOCALAPPDATA%\EA SPORTS FC 26\settings</span></div>
         <label>Choose a file<input disabled={!!busy} type="file" onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f) }} /></label>
         {busy && <div className="progress">{busy}</div>}
       </div>
@@ -268,18 +280,18 @@ function LeagueBest({ league, open, pick, world }: { league: League; open: (id: 
 
 function LeagueView({ league, back, open, userClub, pick, world }: { league: League; back: () => void; open: (id: number) => void; userClub: number; pick: (p: Player) => void; world: World }) {
   const hasTable = league.teams.some(t => t.played > 0)
-  const { sorted, Th } = useSort(league.teams, hasTable ? 'pos' : 'ovr', (t, k) => k === 'pos' ? -(t.tablePos || 99) : k === 'name' ? t.name : (t as any)[k], true)
+  const { sorted, Th } = useSort(league.teams, hasTable ? 'pos' : 'ovr', (t, k) => k === 'pos' ? -(t.tablePos || 99) : k === 'name' ? t.name : k === 'gameOvr' ? t.game.ovr : k === 'ovr' ? (t.rating?.score ?? t.ovr) : (t as any)[k], true)
   return <>
     <div className="crumb"><button onClick={back}>Leagues</button><span>/</span><span>{league.name}</span></div>
     <h1>{league.name}</h1>
     <p className="sub">{league.teams.length} clubs · average rating {league.avgOvr}{league.women ? ' · women\'s competition' : ''}</p>
     <Table className="tbl"><thead><tr>
-      {hasTable && <Th id="pos" label="#" num />}<Th id="name" label="Club" /><Th id="ovr" label="OVR" num /><Th id="att" label="ATT" num /><Th id="mid" label="MID" num /><Th id="def" label="DEF" num /><th>Stars</th><Th id="squadValue" label="Squad value" num /><Th id="worth" label="Club worth" num /><Th id="squadSize" label="Squad" num /><Th id="avgAge" label="Avg age" num />
+      {hasTable && <Th id="pos" label="#" num />}<Th id="name" label="Club" /><Th id="ovr" label="OVR" num /><Th id="gameOvr" label="In-game" num /><Th id="att" label="ATT" num /><Th id="mid" label="MID" num /><Th id="def" label="DEF" num /><th>Stars</th><Th id="squadValue" label="Squad value" num /><Th id="worth" label="Club worth" num /><Th id="squadSize" label="Squad" num /><Th id="avgAge" label="Avg age" num />
       {hasTable && <><Th id="played" label="P" num /><Th id="points" label="Pts" num /></>}
     </tr></thead><tbody>
       {sorted.map(t => <tr key={t.id} className={'click' + (t.id === userClub ? ' user' : '')} onClick={() => open(t.id)}>
         {hasTable && <td className="num dim">{t.tablePos || '–'}</td>}
-        <td className="name"><span className="with-crest"><Logo team={t} size={22} />{t.name}</span></td><td className="num"><Rating v={t.ovr} /></td><td className="num">{t.att}</td><td className="num">{t.mid}</td><td className="num">{t.def}</td>
+        <td className="name"><span className="with-crest"><Logo team={t} size={22} />{t.name}</span></td><td className="num" title={t.rating ? `Companion rating ${t.rating.score}` : undefined}><Rating v={t.ovr} /></td><td className="num dim">{t.game.ovr}</td><td className="num">{t.att}</td><td className="num">{t.mid}</td><td className="num">{t.def}</td>
         <td><Stars n={t.stars} /></td><td className="num">{fmtMoney(t.squadValue)}</td><td className="num">{t.worth ? fmtMoney(t.worth) : '–'}</td><td className="num">{t.squadSize}</td><td className="num">{t.avgAge}</td>
         {hasTable && <><td className="num">{t.played}</td><td className="num"><b>{t.points}</b></td></>}
       </tr>)}
@@ -290,23 +302,55 @@ function LeagueView({ league, back, open, userClub, pick, world }: { league: Lea
 
 function ClubHeader({ t, world }: { t: Team; world: World }) {
   const ovr = useCountUp(t.ovr)
+  const [how, setHow] = useState(false)
+  const r = t.rating
+  // Our scale sits ~3 points above the game's (it averages the XI; the game discounts it), so only flag a real gap.
+  const lag = r ? r.score - GAME_OFFSET - t.game.ovr : 0
   return <div className="club-head">
     <div className="stripe">{t.colors.map((c, i) => <i key={i} style={{ background: c }} />)}</div>
     <div className="body">
-      <div className="ovr">{ovr}<small>overall · <Stars n={t.stars} /></small></div>
-      <div className="club-title"><Logo team={t} size={72} className="club-crest" /><div><h1>{t.name}</h1><div className="meta">{t.league}{t.played ? ` · ${ordinal(t.tablePos)} in table, ${t.points} pts from ${t.played}` : ' · season not started'}{t.founded ? ` · est. ${t.founded}` : ''}{t.capacity ? ` · ${t.capacity.toLocaleString()} seats` : ''}{t.id === world.career.clubId ? ' · your club' : ''}</div></div></div>
+      <div className="ovr" title={r ? `Companion rating ${r.score}` : 'Stored game rating'}>{ovr}<small>{r ? 'squad rating' : 'overall'} · <Stars n={t.stars} /></small></div>
+      <div className="club-title"><Logo team={t} size={72} className="club-crest" /><div><h1>{t.name}</h1><div className="meta">{t.league}{t.played ? ` · ${ordinal(t.tablePos)} in table, ${t.points} pts from ${t.played}` : ' · season not started'}{t.founded ? ` · est. ${t.founded}` : ''}{t.capacity ? ` · ${t.capacity.toLocaleString()} seats` : ''}{t.id === world.career.clubId ? ' · your club' : ''}</div>
+        {r && <div className="rating-line">{t.ratingRank ? <><b>{ordinal(t.ratingRank)}</b> strongest {t.gender === 1 ? "women's " : ''}squad in the world{t.ratingLeagueRank ? <> · <b>{ordinal(t.ratingLeagueRank)}</b> in the league</> : null} · </> : null}
+          <span className="dim">in-game {t.game.ovr} <Stars n={t.game.stars} />{lag >= 3 ? ' — the game hasn\'t caught up with this squad yet' : ''}</span>
+          <button className="text-btn how-btn" onClick={() => setHow(h => !h)} aria-expanded={how}>{how ? 'Hide breakdown' : 'How it\'s rated'}</button></div>}
+      </div></div>
       <div className="kpis">
-        <div className="kpi"><b>{t.att} / {t.mid} / {t.def}</b><span>Attack / midfield / defence</span></div>
+        <div className="kpi"><b>{t.att} / {t.mid} / {t.def}{r ? <> / {t.gk}</> : null}</b><span>Attack / midfield / defence{r ? ' / keeper' : ''}</span></div>
         <div className="kpi"><b>{fmtMoney(t.squadValue)}</b><span>Squad value</span></div>
         <div className="kpi"><b>{t.worth ? fmtMoney(t.worth) : '–'}</b><span>Club worth</span></div>
         <div className="kpi"><b>{t.squadSize} · {t.avgAge}</b><span>Players · average age</span></div>
       </div>
     </div>
+    {r && <Collapse open={how}><RatingBreakdown t={t} /></Collapse>}
+  </div>
+}
+const GAME_OFFSET = 3.3
+const FIT_LABEL = { main: 'main position', secondary: 'secondary −1', adapted: 'adapted −4', out: 'out of position −12', empty: 'no one' } as const
+function RatingBreakdown({ t }: { t: Team }) {
+  const r = t.rating!
+  const lines = (['ATT', 'MID', 'DEF', 'GK'] as const).map(l => ({ l, slots: r.xi.filter(x => x.line === l) }))
+  return <div className="rating-break">
+    <div className="rb-xi">
+      <h3>Strongest XI · {r.formation}</h3>
+      {lines.map(({ l, slots }) => <div key={l} className="rb-line"><span className="rb-tag">{l}<b>{r.lines[l]}</b></span>
+        <div className="rb-slots">{slots.map((x, i) => <div key={i} className={'rb-slot fit-' + x.fit} title={x.player ? `${x.player.name} · ${x.player.pos} ${x.player.ovr} → ${x.slot} ${x.eff} (${FIT_LABEL[x.fit]})` : 'Empty slot (counts as 50)'}>
+          <small>{x.slot}</small><b>{x.player?.shortName ?? '—'}</b><span>{x.eff}{x.fit !== 'main' && x.fit !== 'empty' ? <i> · {x.player!.pos}</i> : null}</span></div>)}</div></div>)}
+      {r.bench.length > 0 && <p className="dim rb-bench">Bench depth: {r.bench.map(p => `${p.shortName} ${p.ovr}`).join(' · ')}</p>}
+    </div>
+    <div className="rb-sum">
+      <h3>The formula</h3>
+      <div className="rb-row"><span>Core<small>average of the XI above</small></span><b>{r.core}</b><em>× 75%</em></div>
+      <div className="rb-row"><span>Star power<small>best three in the XI</small></span><b>{r.top}</b><em>× 15%</em></div>
+      <div className="rb-row"><span>Depth<small>best seven on the bench</small></span><b>{r.depth}</b><em>× 10%</em></div>
+      <div className="rb-row total"><span>Squad rating<small>{r.score} rounds to {t.ovr}</small></span><b>{r.score}</b><em><Stars n={r.stars} /></em></div>
+      <p className="dim">Every formation is tried and the best total wins. A player keeps his full rating in his main position, loses 1 in a listed secondary, 4 in a neighbouring role and 12 anywhere else. Stars: 5 from 85.5, 4½ from 81.5, 4 from 77.5, 3½ from 73.5, 3 from 71. The in-game figure ({t.game.ovr}) only refreshes when the game recalculates it — usually at a new season or when the team sheet is saved.</p>
+    </div>
   </div>
 }
 const ordinal = (n: number) => n + (['th', 'st', 'nd', 'rd'][(n % 100 > 10 && n % 100 < 14) ? 0 : Math.min(n % 10, 4) % 4] ?? 'th')
 
-function Roster({ players, world, pick, wages }: { players: Player[]; world: World; pick: (p: Player) => void; wages: boolean }) {
+function Roster({ players, world, pick, wages, highlight }: { players: Player[]; world: World; pick: (p: Player) => void; wages: boolean; highlight?: number }) {
   const prev = useContext(PrevCtx)
   const [mode, setMode] = useState<'pos' | 'ovr' | 'pot' | 'value' | 'age'>('pos')
   const rows = useMemo(() => {
@@ -326,10 +370,10 @@ function Roster({ players, world, pick, wages }: { players: Player[]; world: Wor
         return <Fragment key={p.id}>{head}<tr className="click" onClick={() => pick(p)}>
           <td className="num dim">{p.jersey || '–'}</td>
           <td className="name"><span className={p.known ? '' : 'unk'}>{p.name}</span>{!p.known && <Pencil p={p} />}{p.id === world.teamById.get(p.teamId)?.captainId && <span className="tag">C</span>}{p.injury > 0 && <span className="tag inj">Injured</span>}{p.onLoanFrom && <span className="tag loan" title={`From ${p.onLoanFrom} until ${p.loanEnd}`}>Loan record</span>}</td>
-          <td><Pos p={p.pos} /></td><td className="dim">{p.positions.slice(1).join(' ')}</td><td className="num">{p.age}</td><td className="num"><RankTag p={p} was={prev?.map.get(p.id)?.rk} /></td><td><ClassTag p={p} /></td><td className="arch-cell" title={p.nation}>{p.archetype.label}</td>
+          <td><Pos p={p.pos} /></td><td className="dim">{p.positions.slice(1).join(' ')}</td><td className="num">{p.age}</td><td className="num"><RankTag p={p} was={prev?.map.get(p.id)?.rk} /></td><td><ClassTag p={p} /></td><td className="arch-cell" title={p.nation}>{p.archetype.roleLabel ?? p.archetype.label}</td>
           <td className="num"><Rating v={p.ovr} /></td><td className="num"><Rating v={p.pot} /></td><td className="num">{fmtMoney(p.value)}<Delta now={p.value} was={prev?.map.get(p.id)?.v} money /></td>
           {wages && <td className="num">{p.wage != null ? fmtMoney(p.wage) : '–'}</td>}
-          <td className="num">{p.contractUntil || '–'}</td><td className="num dim">{p.leagueGoals}</td>
+          <td className="num">{p.contractUntil || '–'}<small className="sub-nation" title={`Joined ${p.joinedLabel}`}>{p.tenure} at club</small></td><td className="num dim">{p.leagueGoals}</td>
         </tr></Fragment>
       })}
     </tbody></Table>
@@ -341,6 +385,77 @@ function ClubView({ team, world, back, pick }: { team: Team; world: World; back:
     <div className="crumb"><button onClick={back}>{team.league}</button><span>/</span><span>{team.name}</span></div>
     <ClubHeader t={team} world={world} />
     <Roster players={team.players} world={world} pick={pick} wages={team.id === world.career.clubId} />
+  </>
+}
+
+/** Home screen for a Player Career save: you first, then the squad around you. */
+function MyPlayer({ me, world, gameId, refresh, pick, openClub }: { me: Player; world: World; gameId?: string; refresh: number; pick: (p: Player) => void; openClub: (id: number) => void }) {
+  const team = world.teamById.get(me.teamId)
+  const grp = rankGroupOf(me.pos)
+  // Everyone in your ranking pool (same gender and position group, real clubs only), in rank order.
+  const pool = useMemo(() => world.players.filter(p => p.rank && p.gender === me.gender && rankGroupOf(p.pos) === grp).sort((a, b) => a.rank - b.rank), [world, me])
+  const at = (r: number) => pool[r - 1]
+  const milestones = [
+    { label: `World's Best ${GROUP_LONG[grp]}`, rank: 1 },
+    { label: 'World-Class', rank: 10 },
+    { label: 'Elite', rank: 30 },
+    { label: 'Top 100', rank: 100 },
+  ].filter(m => me.rank > m.rank && at(m.rank)).map(m => ({ ...m, ovr: at(m.rank)!.ovr, gap: at(m.rank)!.ovr - me.ovr }))
+  // Your age group: same pool, same age.
+  const peers = useMemo(() => pool.filter(p => p.age === me.age).sort((a, b) => b.pot - a.pot || rankOrder(a, b)), [pool, me])
+  const peerRank = peers.findIndex(p => p.id === me.id) + 1
+  // Competition for your shirt: teammates whose primary position is yours.
+  const rivals = useMemo(() => (team?.players ?? []).filter(p => p.pos === me.pos).sort(rankOrder), [team, me])
+  const depth = rivals.findIndex(p => p.id === me.id) + 1
+  const starter = rivals[0]
+  const inGroup = useMemo(() => (team?.players ?? []).filter(p => rankGroupOf(p.pos) === grp).sort(rankOrder), [team, me])
+  const groupDepth = inGroup.findIndex(p => p.id === me.id) + 1
+  return <>
+    <div className="me-hero">
+      <div className={'me-card' + (me.ovr >= 85 ? ' gold' : '')}><div className="o">{me.ovr}</div><div className="p">{me.pos}</div><div className="pot">Potential {me.pot}</div></div>
+      <div className="me-main">
+        <span className="arch-kicker">Player career · Season {world.career.season} ({seasonLabel(world.career.season)})</span>
+        <h1>{me.name}</h1>
+        <div className="meta">{team ? <a href="#" className="with-crest" onClick={e => { e.preventDefault(); openClub(team.id) }}><Logo team={team} size={20} />{team.name}</a> : 'Free agent'} · {me.league} · {me.nation} · {me.age} years old</div>
+        <div className="me-standing"><ClassTag p={me} />{me.rank ? <span>#{me.rank} {GROUP_LONG[grp].toLowerCase()} in the world</span> : null}<span className="dim">{me.archetype.roleLabel ?? me.archetype.label}</span></div>
+        <div className="facts">
+          <div><span>Still to grow</span><b>+{Math.max(0, me.pot - me.ovr)}</b></div>
+          <div><span>Estimated value</span><b>{fmtMoney(me.value)}</b></div>
+          <div><span>Wage</span><b>{fmtMoney(me.wage ?? world.career.wage)} / wk</b></div>
+          <div><span>Contract until</span><b>{me.contractUntil || '–'}</b></div>
+          <div><span>Squad role</span><b>{me.squadPos}{me.jersey ? ` · #${me.jersey}` : ''}</b></div>
+          <div><span>At club since</span><b>{me.joinedLabel}<span className="dim" style={{ display: 'block', fontWeight: 400, fontSize: 12 }}>{me.tenure}</span></b></div>
+          {world.career.agent && <div><span>Agent</span><b>{world.career.agent}</b></div>}
+          <div><span>League goals</span><b>{me.leagueGoals}</b></div>
+        </div>
+        <button className="btn" onClick={() => pick(me)}>Full profile — attributes, roles, history</button>
+      </div>
+    </div>
+
+    <div className="me-grid">
+      <section className="me-panel">
+        <h2>Your spot in the squad</h2>
+        <p className="sub">{rivals.length <= 1 ? <>You are the only {me.pos} at {team?.name}.</> : depth === 1 ? <>You are first choice at {me.pos} — {rivals.length - 1} {rivals.length === 2 ? 'other' : 'others'} behind you.</> : <>You are {ordinal(depth)} of {rivals.length} at {me.pos}; {starter?.shortName} ({starter?.ovr}) holds the shirt, {starter ? starter.ovr - me.ovr : 0} ahead of you.</>} {ordinal(groupDepth)} of {inGroup.length} {GROUP_PLURAL[grp]} in the squad.</p>
+        <Table className="tbl"><thead><tr><th className="num">#</th><th>Player</th><th className="num">Age</th><th className="num">OVR</th><th className="num">POT</th><th>Squad slot</th></tr></thead><tbody>
+          {rivals.map((p, i) => <tr key={p.id} className={'click' + (p.id === me.id ? ' me' : '')} onClick={() => pick(p)}><td className="num dim">{i + 1}</td><td className="name">{p.name}</td><td className="num">{p.age}</td><td className="num"><Rating v={p.ovr} /></td><td className="num dim">{p.pot}</td><td className="dim">{p.squadPos}</td></tr>)}
+        </tbody></Table>
+      </section>
+
+      <section className="me-panel">
+        <h2>Road to the top</h2>
+        <p className="sub">Where you stand among the world's {me.gender ? "women's " : ''}{GROUP_PLURAL[grp]}, and the overall it currently takes to reach each tier.</p>
+        {milestones.length === 0 ? <p>You are the world's best {GROUP_LONG[grp].toLowerCase()}.</p> :
+          <div className="milestones">{milestones.map(m => <div key={m.rank} className="ms"><span>{m.label}</span><b>{m.ovr} OVR</b><em className={m.gap <= 0 ? 'ok' : ''}>{m.gap <= 0 ? 'rating is there — rank follows' : `+${m.gap} to go`}</em></div>)}</div>}
+        {peers.length > 1 && <p className="sub" style={{ marginTop: 14 }}>Among {peers.length} {me.age}-year-old {GROUP_PLURAL[grp]}, your potential ranks <b>#{peerRank}</b>{peers[0].id !== me.id && <> — {peers[0].shortName} ({peers[0].ovr}/{peers[0].pot}, {peers[0].team}) is top</>}.</p>}
+      </section>
+    </div>
+
+    <Suitors p={me} world={world} openClub={openClub} />
+
+    <h2>Teammates</h2>
+    {team ? <Roster players={team.players} world={world} pick={pick} wages={false} highlight={me.id} /> : <p className="dim">You are without a club.</p>}
+
+    {gameId && <Timeline id={me.id} gameId={gameId} refresh={refresh} />}
   </>
 }
 
@@ -393,15 +508,15 @@ function Search({ world, pick, openClub }: { world: World; pick: (p: Player) => 
   const lineups = useMemo(() => lineupIndex(world), [world])
   const youthIds = useMemo(() => new Set(world.youth.map(y => y.id)), [world])
   const [q, setQ] = useState(''); const [g, setG] = useState<'all' | 0 | 1>(0); const [pos, setPos] = useState('')
-  const [adv, setAdv] = useState(false); const [arch, setArch] = useState(''); const [tag, setTag] = useState(''); const [ovr, setOvr] = useState([40, 99]); const [pot, setPot] = useState([40, 99]); const [age, setAge] = useState([15, 45]); const [lg, setLg] = useState(-2); const [page, setPage] = useState(0)
+  const [adv, setAdv] = useState(false); const [arch, setArch] = useState(''); const [role2, setRole2] = useState(''); const [roleLvl, setRoleLvl] = useState<'any' | '++'>('any'); const [tag, setTag] = useState(''); const [ovr, setOvr] = useState([40, 99]); const [pot, setPot] = useState([40, 99]); const [age, setAge] = useState([15, 45]); const [lg, setLg] = useState(-2); const [page, setPage] = useState(0)
   const specialLeagues = useMemo(() => new Set(world.leagues.filter(l => l.intl).map(l => l.id)), [world])
   const opportunities = useMemo(() => new Map(world.players.map(p => [p.id, opportunity(depth, lineups, p, pos || p.pos, slotOverride)])), [world, depth, lineups, pos, slotOverride])
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase()
     return world.players.filter(p => !youthIds.has(p.id) &&
       (!contract || (p.contractUntil > 0 && p.contractUntil <= Number(contract))) && (!foot || p.foot === foot) && (!minGrowth || p.pot - p.ovr >= Number(minGrowth)) && (!minSkill || p.skill >= Number(minSkill)) && (!minWeak || p.weak >= Number(minWeak)) && (!fit || !p.injury) && (!notLoan || !p.onLoanFrom) &&
-      opportunities.get(p.id)!.ahead.length >= minAhead && (role === 'all' || (role === 'backup' && opportunities.get(p.id)!.blocked) || (role === 'best' && opportunities.get(p.id)!.rank !== null && (opportunities.get(p.id)!.slots ?? 0) > 0 && !opportunities.get(p.id)!.blocked) || (role === 'buried' && opportunities.get(p.id)!.blocked && opportunities.get(p.id)!.ahead.length >= 2) || (role === 'bench' && p.teamId >= 0 && ['SUB','RES'].includes(p.squadPos)) || (role === 'xi' && p.teamId >= 0 && inSavedXI(p))) && (g === 'all' || p.gender === g) && (!pos || (pos.startsWith('G:') ? matchesPos(p, pos) : includeSecondary ? p.positions.includes(pos) : p.pos === pos)) && p.ovr >= ovr[0] && p.ovr <= ovr[1] && p.pot >= pot[0] && p.pot <= pot[1] && p.age >= age[0] && p.age <= age[1] && (!arch || p.archetype.id === arch) && (!tag || p.archetype.tags.includes(tag)) && (lg === -2 ? !specialLeagues.has(p.leagueId) : p.leagueId === lg) && (!s || p.name.toLowerCase().includes(s) || p.team.toLowerCase().includes(s) || p.nation.toLowerCase().includes(s)))
-  }, [world, q, g, pos, ovr, pot, age, arch, tag, lg, specialLeagues, role, contract, foot, minGrowth, minSkill, minWeak, fit, notLoan, depth, youthIds, opportunities, minAhead, includeSecondary])
+      opportunities.get(p.id)!.ahead.length >= minAhead && (role === 'all' || (role === 'backup' && opportunities.get(p.id)!.blocked) || (role === 'best' && opportunities.get(p.id)!.rank !== null && (opportunities.get(p.id)!.slots ?? 0) > 0 && !opportunities.get(p.id)!.blocked) || (role === 'buried' && opportunities.get(p.id)!.blocked && opportunities.get(p.id)!.ahead.length >= 2) || (role === 'bench' && p.teamId >= 0 && ['SUB','RES'].includes(p.squadPos)) || (role === 'xi' && p.teamId >= 0 && inSavedXI(p))) && (g === 'all' || p.gender === g) && (!pos || (pos.startsWith('G:') ? matchesPos(p, pos) : includeSecondary ? p.positions.includes(pos) : p.pos === pos)) && p.ovr >= ovr[0] && p.ovr <= ovr[1] && p.pot >= pot[0] && p.pot <= pot[1] && p.age >= age[0] && p.age <= age[1] && (!arch || p.archetype.id === arch) && (!role2 || p.roles.some(r => r.name === role2 && (roleLvl === 'any' || r.level === '++'))) && (!tag || p.archetype.tags.includes(tag)) && (lg === -2 ? !specialLeagues.has(p.leagueId) && !p.isYouth && !p.isSpecial : p.leagueId === lg) && (!s || p.name.toLowerCase().includes(s) || p.team.toLowerCase().includes(s) || p.nation.toLowerCase().includes(s)))
+  }, [world, q, g, pos, ovr, pot, age, arch, role2, roleLvl, tag, lg, specialLeagues, role, contract, foot, minGrowth, minSkill, minWeak, fit, notLoan, depth, youthIds, opportunities, minAhead, includeSecondary])
   const allTags = useMemo(() => Array.from(new Set(world.players.flatMap(p => p.archetype.tags))).sort(), [world])
   const showDepth = adv || role !== 'all' || minAhead > 0
   const { sorted, Th } = useSort(rows, 'ovr', (p, k) => (p as any)[k], true, rankOrder)
@@ -419,6 +534,8 @@ function Search({ world, pick, openClub }: { world: World; pick: (p: Player) => 
     <div className="bar">
       <span className="range">OVR <R v={ovr} set={setOvr} /></span><span className="range">POT <R v={pot} set={setPot} /></span><span className="range">Age <R v={age} set={setAge} /></span>
       <select aria-label="Archetype" value={arch} onChange={e => setArch(e.target.value)}><option value="">Any archetype</option>{(Object.keys(GROUP_LABEL) as Group[]).map(g => <optgroup key={g} label={GROUP_LABEL[g]}>{ARCHETYPES.filter(x => x.group === g).map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>)}</select>
+      <select aria-label="Player role" value={role2} onChange={e => setRole2(e.target.value)}><option value="">Any role</option>{ROLE_NAMES.map(n => <option key={n}>{n}</option>)}</select>
+      {role2 && <div className="seg"><button className={roleLvl === 'any' ? 'on' : ''} onClick={() => setRoleLvl('any')}>+ or ++</button><button className={roleLvl === '++' ? 'on' : ''} onClick={() => setRoleLvl('++')}>++ only</button></div>}
       <select aria-label="Style tag" value={tag} onChange={e => setTag(e.target.value)}><option value="">Any style tag</option>{allTags.map(t => <option key={t}>{t}</option>)}</select>
       <span className="count">{sorted.length.toLocaleString()} players</span>
     </div>
@@ -440,8 +557,8 @@ function Search({ world, pick, openClub }: { world: World; pick: (p: Player) => 
     <Table className="tbl"><thead><tr><th className="num">#</th><th aria-label="Shortlist"></th><Th id="name" label="Player" /><th>Pos</th><Th id="age" label="Age" num /><Th id="team" label="Club" /><Th id="rank" label="Rank" num /><th>Class</th><th>Archetype</th><Th id="ovr" label="OVR" num /><Th id="pot" label="POT" num /><Th id="value" label="Value" num /><Th id="contractUntil" label="Contract" num />{showDepth && <><th>Starting opportunity</th><th>Players ahead at this position</th></>}</tr></thead><tbody>
       {sorted.slice(page * per, page * per + per).map((p, i) => <tr key={p.id} className="click" onClick={() => pick(p)}><td className="num dim">{page * per + i + 1}</td>
         <td><StarButton p={p} /></td><td className="name"><span className={p.known ? '' : 'unk'}>{p.name}</span>{!p.known && <Pencil p={p} />}{p.onLoanFrom && <span className="tag loan">Loan</span>}<small className="sub-nation">{p.nation}</small></td><td><Pos p={p.pos} />{p.positions.length > 1 && <span className="dim" style={{ color: 'var(--ink-3)', marginLeft: 6, fontSize: 12 }}>{p.positions.slice(1).join(' ')}</span>}</td>
-        <td className="num">{p.age}</td><td>{p.teamId >= 0 ? <a href="#" className="with-crest" onClick={e => { e.preventDefault(); e.stopPropagation(); openClub(p.teamId) }}>{world.teamById.get(p.teamId) && <Logo team={world.teamById.get(p.teamId)!} size={18} />}{p.team}</a> : <span className="dim">Free agent</span>}</td><td className="num"><RankTag p={p} was={prev?.map.get(p.id)?.rk} /></td><td><ClassTag p={p} /></td><td className="arch-cell">{p.archetype.label}</td>
-        <td className="num"><Rating v={p.ovr} /></td><td className="num"><Rating v={p.pot} /></td><td className="num">{fmtMoney(p.value)}<Delta now={p.value} was={prev?.map.get(p.id)?.v} money /></td><td className="num">{p.contractUntil || '–'}</td>{showDepth && <><td className="hierarchy-cell">{(() => { const h = opportunities.get(p.id)!; return <><b>{h.status}</b><small>{h.rank !== null ? `#${h.rank} · ${pos || p.pos} · ${h.slots ?? '?'} starting slot${h.slots === 1 ? '' : 's'}` : 'Unassigned'}<br />{h.source}</small></> })()}</td><td className="competition-cell">{(() => { const h = opportunities.get(p.id)!; return h.ahead.length ? <>{h.ahead.map(a => <button key={a.id} className="text-btn" onClick={e => { e.stopPropagation(); pick(a) }}>{a.name} · {a.ovr}<small>{a.pos}{a.pos !== (pos || p.pos) ? ' · secondary option' : ' · primary'}{inSavedXI(a) ? ` · saved: ${a.squadPos}` : ''}</small></button>)}</> : h.rank !== null ? <span className="dim">No higher-rated peers</span> : '—' })()}</td></>}
+        <td className="num">{p.age}</td><td>{p.teamId >= 0 ? <a href="#" className="with-crest" onClick={e => { e.preventDefault(); e.stopPropagation(); openClub(p.teamId) }}>{world.teamById.get(p.teamId) && <Logo team={world.teamById.get(p.teamId)!} size={18} />}{p.team}</a> : <span className="dim">Free agent</span>}</td><td className="num"><RankTag p={p} was={prev?.map.get(p.id)?.rk} /></td><td><ClassTag p={p} /></td><td className="arch-cell">{p.archetype.roleLabel ?? p.archetype.label}{p.roles[0] && <small className="sub-nation">{p.roles[0].name} {p.roles[0].level}</small>}</td>
+        <td className="num"><Rating v={p.ovr} /></td><td className="num"><Rating v={p.pot} /></td><td className="num">{fmtMoney(p.value)}<Delta now={p.value} was={prev?.map.get(p.id)?.v} money /></td><td className="num">{p.contractUntil || '–'}<small className="sub-nation" title={`Joined ${p.joinedLabel}`}>{p.tenure}</small></td>{showDepth && <><td className="hierarchy-cell">{(() => { const h = opportunities.get(p.id)!; return <><b>{h.status}</b><small>{h.rank !== null ? `#${h.rank} · ${pos || p.pos} · ${h.slots ?? '?'} starting slot${h.slots === 1 ? '' : 's'}` : 'Unassigned'}<br />{h.source}</small></> })()}</td><td className="competition-cell">{(() => { const h = opportunities.get(p.id)!; return h.ahead.length ? <>{h.ahead.map(a => <button key={a.id} className="text-btn" onClick={e => { e.stopPropagation(); pick(a) }}>{a.name} · {a.ovr}<small>{a.pos}{a.pos !== (pos || p.pos) ? ' · secondary option' : ' · primary'}{inSavedXI(a) ? ` · saved: ${a.squadPos}` : ''}</small></button>)}</> : h.rank !== null ? <span className="dim">No higher-rated peers</span> : '—' })()}</td></>}
       </tr>)}
     </tbody></Table>
     {pages > 1 && <div className="pager"><button disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</button><span>Page {page + 1} of {pages}</span><button disabled={page >= pages - 1} onClick={() => setPage(page + 1)}>Next</button></div>}
@@ -449,28 +566,37 @@ function Search({ world, pick, openClub }: { world: World; pick: (p: Player) => 
 }
 
 function Suitors({ p, world, openClub }: { p: Player; world: World; openClub: (id: number) => void }) {
+  const [open, setOpen] = useState(false)
   const [minStars, setMinStars] = useState(4)
   const [scope, setScope] = useState<'world' | 'league'>('world')
-  const [secondary, setSecondary] = useState(true)
-  const rows = useMemo(() => suitors(world, p, { minStars, sameLeagueOnly: scope === 'league', includeSecondary: secondary }), [world, p, minStars, scope, secondary])
-  return <div className="suitors">
-    <div className="bar" style={{ margin: '0 0 10px' }}>
-      <span className="arch-kicker" style={{ margin: 0 }}>Clubs that could use {p.shortName}</span>
-      <div className="seg">{[5, 4.5, 4, 3].map(s => <button key={s} className={minStars === s ? 'on' : ''} onClick={() => setMinStars(s)}>{s}★+</button>)}</div>
-      <div className="seg"><button className={scope === 'world' ? 'on' : ''} onClick={() => setScope('world')}>All leagues</button><button className={scope === 'league' ? 'on' : ''} onClick={() => setScope('league')}>Own league</button></div>
-      <label className="chk"><input type="checkbox" checked={secondary} onChange={e => setSecondary(e.target.checked)} /> Include secondary positions</label>
-    </div>
-    {rows.length === 0 ? <p className="dim">No club at this level has a weaker option in {p.positions.join(' / ')} — {p.shortName} would not be an upgrade anywhere in that range.</p> :
-      <Table className="tbl"><thead><tr><th>Club</th><th className="num">OVR</th><th>Stars</th><th>League</th><th>Slot</th><th>Currently</th><th className="num">Upgrade</th></tr></thead><tbody>
-        {rows.map(s => <tr key={s.team.id} className="click" onClick={() => openClub(s.team.id)}>
-          <td className="name"><span className="with-crest"><Logo team={s.team} size={20} />{s.team.name}</span></td>
-          <td className="num"><Rating v={s.team.ovr} /></td><td><Stars n={s.team.stars} /></td><td className="dim">{s.team.league}</td>
-          <td><Pos p={s.pos} /></td>
-          <td>{s.incumbent ? <>{s.incumbent.shortName} <span className="dim">{s.incumbent.ovr} · {s.incumbent.age}y</span></> : <span className="dim">no option</span>}</td>
-          <td className="num"><span className="trend up">+{s.gap}</span>{s.ageEdge && <span className="tag" title="Incumbent is at least four years older">younger</span>}</td>
-        </tr>)}
-      </tbody></Table>}
-  </div>
+  const [secondary, setSecondary] = useState(false)
+  const rows = useMemo(() => open ? suitors(world, p, { minStars, sameLeagueOnly: scope === 'league', includeSecondary: secondary }) : [], [open, world, p, minStars, scope, secondary])
+  return <section className="suitors suitors-anchor">
+    <button className="disclose" aria-expanded={open} onClick={() => setOpen(o => !o)}>
+      <span className="caret" aria-hidden>▸</span>
+      <span className="disclose-title">Clubs that could use {p.shortName}</span>
+      <span className="disclose-hint">{open ? 'Hide' : 'Where he would be an upgrade'}</span>
+    </button>
+    <Collapse open={open}>
+      <div className="suitors-body">
+        <div className="filters">
+          <label><span>Club calibre</span><div className="seg">{[5, 4.5, 4, 3].map(s => <button key={s} className={minStars === s ? 'on' : ''} onClick={() => setMinStars(s)}>{s}★+</button>)}</div></label>
+          <label><span>Scope</span><div className="seg"><button className={scope === 'world' ? 'on' : ''} onClick={() => setScope('world')}>All leagues</button><button className={scope === 'league' ? 'on' : ''} onClick={() => setScope('league')}>Own league</button></div></label>
+          <label className="chk-wrap"><span>Positions</span><label className="chk" title="Also look at clubs needing one of his secondary positions. The club's incumbent is always the player who lists that position as his primary."><input type="checkbox" checked={secondary} onChange={e => setSecondary(e.target.checked)} /> Also his secondary positions</label></label>
+        </div>
+        {rows.length === 0 ? <p className="dim">No club at this level has a weaker option in {p.positions.join(' / ')}.</p> :
+          <Table className="tbl"><thead><tr><th>Club</th><th className="num">OVR</th><th>Stars</th><th>League</th><th>Slot</th><th>Currently</th><th className="num">Upgrade</th></tr></thead><tbody>
+            {rows.map(s => <tr key={s.team.id} className="click" onClick={() => openClub(s.team.id)}>
+              <td className="name"><span className="with-crest"><Logo team={s.team} size={20} />{s.team.name}</span></td>
+              <td className="num"><Rating v={s.team.ovr} /></td><td className="stars-cell"><Stars n={s.team.stars} /></td><td className="dim">{s.team.league}</td>
+              <td><Pos p={s.pos} />{s.pos !== p.pos && <span className="tag" title="One of his secondary positions">2nd</span>}</td>
+              <td>{s.incumbent ? <span className="incumbent">{s.incumbent.shortName}<small>{s.incumbent.ovr} OVR · {s.incumbent.age}y{s.ageEdge ? ' · older' : ''}{s.coverOnly ? ` · ${s.incumbent.pos} covering` : ''}</small></span> : <span className="dim">nobody</span>}</td>
+              <td className="num"><span className="trend up">+{s.gap}</span></td>
+            </tr>)}
+          </tbody></Table>}
+      </div>
+    </Collapse>
+  </section>
 }
 
 function PlayerModal({ p, world, close, openClub, gameId, refresh }: { gameId: string; refresh: number; p: Player; world: World; close: () => void; openClub: (id: number) => void }) {
@@ -487,7 +613,7 @@ function PlayerModal({ p, world, close, openClub, gameId, refresh }: { gameId: s
         <h1 className={p.known ? '' : 'unk'}><Pencil p={p} /><StarButton p={p} />{p.name}</h1>
         <div className="meta" style={{ color: 'var(--ink-2)' }}>{p.teamId >= 0 ? <a href="#" className="with-crest" onClick={e => { e.preventDefault(); openClub(p.teamId) }}>{world.teamById.get(p.teamId) && <Logo team={world.teamById.get(p.teamId)!} size={18} />}{p.team}</a> : 'Free agent'} · {p.league} · {p.nation}{p.nationalTeam ? ` (${p.nationalTeam} squad)` : ''} · {p.gender ? 'Women' : 'Men'}{p.fullName !== p.name ? ` · full name: ${p.fullName}` : ''}{p.onLoanFrom && ` · loan record: ${p.onLoanFrom}, recorded end ${p.loanEnd}`}</div>
         <div className="facts">
-          <div className="standing"><span>Standing</span><b><ClassTag p={p} /> {p.rank ? <span className="dim">#{p.rank} {p.gender ? "women's " : ''}{GROUP_LONG[rankGroupOf(p.pos)].toLowerCase()} in the world{was?.rk != null && was.rk !== p.rank ? <> <span className={'trend ' + (p.rank < was.rk ? 'up' : 'down')}>{p.rank < was.rk ? '▲' : '▼'}{Math.abs(p.rank - was.rk)}</span></> : null} · #{p.rankPos} {POS_LONG[p.pos] ?? p.pos} · #{p.rankLeague} in league</span> : ''}</b></div><div><span>Age</span><b>{p.age} · {p.birth}</b></div><div><span>Positions</span><b>{p.positions.join(', ')}</b></div><div><span>Squad role</span><b>{p.squadPos}{p.jersey ? ` · #${p.jersey}` : ''}</b></div>
+          <div className="standing"><span>Standing</span><b><ClassTag p={p} /> {p.rank ? <span className="dim">#{p.rank} {p.gender ? "women's " : ''}{GROUP_LONG[rankGroupOf(p.pos)].toLowerCase()} in the world{was?.rk != null && was.rk !== p.rank ? <> <span className={'trend ' + (p.rank < was.rk ? 'up' : 'down')}>{p.rank < was.rk ? '▲' : '▼'}{Math.abs(p.rank - was.rk)}</span></> : null} · #{p.rankPos} {POS_LONG[p.pos] ?? p.pos} · #{p.rankLeague} in league</span> : ''}</b></div><div><span>Age</span><b>{p.age} · {p.birth}</b></div><div><span>Positions</span><b>{p.positions.join(', ')}</b></div><div><span>At club since</span><b>{p.joinedLabel} <span className="dim">· {p.tenure}</span></b></div><div><span>Squad role</span><b>{p.squadPos}{p.jersey ? ` · #${p.jersey}` : ''}</b></div>
           <div><span>Estimated value</span><b>{fmtMoney(p.value)} <Delta now={p.value} was={was?.v} money /></b></div>{was && <div><span>Since {prev!.label}</span><b>OVR {was.ovr}→{p.ovr} · POT {was.pot}→{p.pot}{was.rk ? <> · rank #{was.rk}→#{p.rank}</> : null}{was.t !== p.teamId && <> · from {was.team}</>}</b></div>}<div><span>Wage</span><b>{p.wage != null ? fmtMoney(p.wage) + ' / wk' : 'Not in save'}</b></div><div><span>Contract until</span><b>{p.contractUntil || '–'}</b></div>
           <div><span>Foot · skill · weak foot</span><b>{p.foot} · {p.skill}★ · {p.weak}★</b></div><div><span>Height · weight</span><b>{p.height} cm · {p.weight} kg</b></div><div><span>League goals</span><b>{p.leagueGoals}{p.injury > 0 ? ' · currently injured' : ''}</b></div>
         </div>
@@ -496,12 +622,14 @@ function PlayerModal({ p, world, close, openClub, gameId, refresh }: { gameId: s
 
     <div className="face">{Object.entries(face).map(([k, v]) => <div key={k}><b>{v}</b><span>{k}</span></div>)}</div>
     <div className="arch">
-      <div className="arch-main"><span className="arch-kicker">Archetype · {GROUP_LABEL[p.archetype.group]}</span><b>{p.archetype.label}</b><p>{archetypeBlurb(p.archetype.id)}</p>
-        {p.archetype.tags.length > 0 && <div className="tags">{p.archetype.tags.map(t => <span key={t} className="tag style">{t}</span>)}</div>}</div>
+      <div className="arch-main"><span className="arch-kicker">Archetype · {GROUP_LABEL[p.archetype.group]}</span><b>{p.archetype.roleLabel ?? p.archetype.label}</b>
+        <p>{archetypeBlurb(p.archetype.id)}{p.roles[0] && <> Plays as a {p.roles[0].name} for his club.</>}</p>
+        {p.roles.length > 0 && <div className="roles"><span className="arch-kicker">Roles the game gives him</span><div className="tags">{p.roles.map(r => <span key={r.name} className={'tag role ' + (r.level === '++' ? 'rpp' : 'rp')} title={`${r.name} at ${r.level === '++' ? 'Role++ — world class in this role' : 'Role+ — accomplished in this role'} (${r.positions.join(', ')})`}>{r.name}<em>{r.level}</em></span>)}</div></div>}
+        {p.archetype.tags.length > 0 && <div className="tags" style={{ marginTop: 10 }}>{p.archetype.tags.map(t => <span key={t} className="tag style">{t}</span>)}</div>}</div>
       <div className="arch-scores"><span className="arch-kicker">Profile fit {p.archetype.fit}%</span>{p.archetype.scores.map(sc => <div className="arow" key={sc.id}><div>{sc.name}<div className="bar-bg"><div className="bar-fg" style={{ width: `${sc.score}%`, background: sc.id === p.archetype.id ? 'var(--gold)' : 'var(--green)' }} /></div></div><b>{sc.score}</b></div>)}</div>
     </div>
-    <div className="attrs">{groups.map(([name, keys]) => <div key={name}><h3>{name}</h3>{keys.map(k => <div className="arow" key={k}><div>{ATTR_LABEL[k]}<div className="bar-bg"><div className="bar-fg" style={{ width: `${p.attrs[k]}%`, background: p.attrs[k] >= 80 ? 'var(--gold)' : p.attrs[k] >= 65 ? 'var(--green)' : '#8d948f' }} /></div></div><b>{p.attrs[k]}</b></div>)}</div>)}</div>
     <Suitors p={p} world={world} openClub={openClub} />
+    <div className="attrs">{groups.map(([name, keys]) => <div key={name}><h3>{name}</h3>{keys.map(k => <div className="arow" key={k}><div>{ATTR_LABEL[k]}<div className="bar-bg"><div className="bar-fg" style={{ width: `${p.attrs[k]}%`, background: p.attrs[k] >= 80 ? 'var(--gold)' : p.attrs[k] >= 65 ? 'var(--green)' : '#8d948f' }} /></div></div><b>{p.attrs[k]}</b></div>)}</div>)}</div>
     <Timeline id={p.id} gameId={gameId} refresh={refresh} />
     {!p.known && <p className="sub" style={{ marginTop: 16 }}>This player's name ID isn't in the bundled name pool. Player ID {p.id}. Click the pencil to set a name; it's remembered in this browser{world.career.club ? '' : ''}.</p>}
   </div></div>

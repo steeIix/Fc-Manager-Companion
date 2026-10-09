@@ -3,7 +3,7 @@
 
 export type Group = 'GK' | 'CB' | 'FB' | 'DM' | 'CM' | 'AM' | 'W' | 'ST'
 export interface Archetype { id: string; name: string; adj: string; group: Group; blurb: string; w: [string, number][] }
-export interface ArchetypeResult { id: string; name: string; label: string; fit: number; group: Group; scores: { id: string; name: string; score: number }[]; tags: string[] }
+export interface ArchetypeResult { id: string; name: string; label: string; roleLabel?: string; fit: number; group: Group; scores: { id: string; name: string; score: number }[]; tags: string[] }
 
 const A = (id: string, name: string, adj: string, group: Group, blurb: string, w: [string, number][]): Archetype => ({ id, name, adj, group, blurb, w })
 
@@ -109,7 +109,7 @@ export function groupStats(items: { group: Group; raw: Record<string, number> }[
 
 const COMPLETE: Record<Group, string> = { GK: 'Complete Keeper', CB: 'Complete Defender', FB: 'Complete Full-Back', DM: 'Complete Midfielder', CM: 'Complete Midfielder', AM: 'Complete Playmaker', W: 'Complete Winger', ST: 'Complete Forward' }
 
-export function finalize(group: Group, raw: Record<string, number>, stats: GroupStats, attrs: Record<string, number>, extra: { skill: number; height: number; ovr: number }): ArchetypeResult {
+export function finalize(group: Group, raw: Record<string, number>, stats: GroupStats, attrs: Record<string, number>, extra: { skill: number; height: number; ovr: number; role?: { name: string; level: '+' | '++' } }): ArchetypeResult {
   const z = Object.entries(raw).map(([id, v]) => { const st = stats[`${group}:${id}`]; return { id, v, z: st ? (v - st.mean) / st.sd : 0 } })
   const mean = z.reduce((s, r) => s + r.z, 0) / z.length
   const scored = z.map(r => { const a = ARCHETYPES.find(x => x.id === r.id)!; return { id: r.id, name: a.name, adj: a.adj, score: Math.round(r.v), rel: r.z - mean } }).sort((x, y) => y.rel - x.rel)
@@ -122,7 +122,17 @@ export function finalize(group: Group, raw: Record<string, number>, stats: Group
   const fit = Math.max(5, Math.min(100, Math.round(55 + first.rel * 30)))
   const gk = group === 'GK'
   const tags = TAGS.map(([n, f]) => [n, f(attrs, { skill: extra.skill, height: extra.height, gk })] as [string, number]).filter(([, v]) => v >= 0).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([n]) => n)
-  return { id: first.id, name: first.name, label, fit, group, scores: scored.map(({ id, name, score }) => ({ id, name, score })), tags }
+  // Fuse the attribute shape with the role the game actually gives him: his role is the tactical
+  // noun, the attribute archetype the qualifier ("Rapid Inside Forward", "Aerial Target Forward").
+  let roleLabel: string | undefined
+  if (extra.role) {
+    const adj = first.adj, role = extra.role.name
+    // Drop the qualifier when it restates the role ("Playmaking Playmaker", "Winger Winger").
+    const stem = (w: string) => w.toLowerCase().replace(/(ing|er|ed|ive|y)$/, '').slice(0, 5)
+    const roleStems = new Set(role.split(/[\s-]+/).map(stem))
+    roleLabel = adj.split(/[\s-]+/).some(w => roleStems.has(stem(w))) ? role : `${adj} ${role}`
+  }
+  return { id: first.id, name: first.name, label, roleLabel, fit, group, scores: scored.map(({ id, name, score }) => ({ id, name, score })), tags }
 }
 
 export const archetypeBlurb = (id: string) => ARCHETYPES.find(a => a.id === id)?.blurb ?? ''
