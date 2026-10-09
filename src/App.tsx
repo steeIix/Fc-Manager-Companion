@@ -4,13 +4,14 @@ import { parseSave, isCareerSave, type Meta } from './parser'
 import { Snapshots } from './Snapshots'
 import { Transfers } from './Transfers'
 import { Market } from './Market'
+import { Rankings } from './Rankings'
 import { fromWorld, saveWithFile, getSnapshot, getSavedFile, saveSnapshot, allSnapshots, setHistoryPosition, recoverFinish, historyKey, type HistoryFinish, listGames, toggleTarget, type Game } from './snapshots'
 import { Games, Timeline, Youth, Planner, Shortlist } from './Features'
 import { depthIndex, opportunity, lineupIndex, inSavedXI, suitors } from './planning'
 import { ARCHETYPES, GROUP_LABEL, archetypeBlurb, type Group } from './archetypes'
 import { ROLE_NAMES } from './roles'
 import { Logo, logosEnabled, setLogosEnabled } from './Logo'
-import type { PSnap } from './snapshots'
+import type { PSnap, TSnap } from './snapshots'
 import { loadOverrides, setOverride } from './names'
 import { buildWorld, fmtMoney, fmtDate, posGroup, rankGroupOf, rankOrder, seasonLabel, POS_LONG, GROUP_SHORT, GROUP_PLURAL, GROUP_LONG, POS_ORDER, POS_GROUPS, matchesPos, ATTR_GROUPS, ATTR_LABEL, type World, type Player, type Team, type League, type Names, type ValueModel } from './model'
 
@@ -61,7 +62,7 @@ function ClubSwitcher({ world, viewed, go }: { world: World; viewed?: Team; go: 
 }
 
 // Previous save in the same game, for ▲/▼ deltas.
-type Prev = { map: Map<number, PSnap>; label: string } | null
+type Prev = { map: Map<number, PSnap>; teams: Map<number, TSnap>; label: string } | null
 const PrevCtx = createContext<Prev>(null)
 function usePrevSnapshot(gameId: string | undefined, currentId: string | undefined, tick: number): Prev {
   const [prev, setPrev] = useState<Prev>(null)
@@ -73,7 +74,7 @@ function usePrevSnapshot(gameId: string | undefined, currentId: string | undefin
       const sorted = all.slice().sort((x, y) => (x.order ?? 0) - (y.order ?? 0))
       const i = sorted.findIndex(s => s.id === currentId)
       const p = i > 0 ? sorted[i - 1] : (currentId ? null : sorted[sorted.length - 1])
-      setPrev(p ? { map: new Map(p.players.map(x => [x.id, x])), label: `Save ${p.order ?? '?'}${p.label ? ` · ${p.label}` : ''}` } : null)
+      setPrev(p ? { map: new Map(p.players.map(x => [x.id, x])), teams: new Map(p.teams.map(x => [x.id, x])), label: `Save ${p.order ?? '?'}${p.label ? ` · ${p.label}` : ''}` } : null)
     }).catch(() => setPrev(null))
     return () => { live = false }
   }, [gameId, currentId, tick])
@@ -96,7 +97,7 @@ function useTheme() {
 }
 const ThemeButton = ({ t }: { t: { theme: string; toggle: () => void } }) => <button className="theme-btn" onClick={t.toggle} aria-label="Toggle dark mode">{t.theme === 'dark' ? '☀ Light' : '☾ Dark'}</button>
 
-type View = { kind: 'market' } | { kind: 'transfers' } | { kind: 'games' } | { kind: 'shortlist' } | { kind: 'snapshots' } | { kind: 'leagues' } | { kind: 'league'; id: number } | { kind: 'club'; id: number } | { kind: 'players' } | { kind: 'my' } | { kind: 'me' }
+type View = { kind: 'market' } | { kind: 'transfers' } | { kind: 'games' } | { kind: 'shortlist' } | { kind: 'snapshots' } | { kind: 'leagues' } | { kind: 'league'; id: number } | { kind: 'club'; id: number } | { kind: 'players' } | { kind: 'my' } | { kind: 'me' } | { kind: 'rankings' }
 
 const Rating = ({ v }: { v: number }) => <span className={'rt ' + (v >= 85 ? 'r5' : v >= 78 ? 'r4' : v >= 70 ? 'r3' : v >= 60 ? 'r2' : 'r1')}>{v}</span>
 const Pos = ({ p }: { p: string }) => <span className={'pos ' + posGroup(p).toLowerCase()}>{p}</span>
@@ -104,11 +105,44 @@ const Stars = ({ n }: { n: number }) => <span className="stars" title={`${n} sta
 
 const TargetContext = createContext<{ ids: number[]; toggle: (id: number) => void }>({ ids: [], toggle: () => {} })
 function StarButton({ p }: { p: Player }) { const targets = useContext(TargetContext); const on = targets.ids.includes(p.id); return <button className="star-btn" aria-label={`${on ? 'Remove' : 'Add'} ${p.name} ${on ? 'from' : 'to'} shortlist`} aria-pressed={on} onClick={e => { e.stopPropagation(); targets.toggle(p.id) }}>{on ? '★' : '☆'}</button> }
+
+// The open screen lives in the URL hash (#/club/123/p/456) so a duplicated tab, a refresh or the
+// back button lands on the same page. The save itself is reopened from this browser's storage.
+const SIMPLE_VIEWS = ['market', 'transfers', 'games', 'shortlist', 'snapshots', 'leagues', 'players', 'my', 'me', 'rankings'] as const
+function viewToHash(v: View, playerId?: number) {
+  const base = 'id' in v ? `#/${v.kind}/${v.id}` : `#/${v.kind}`
+  return playerId ? `${base}/p/${playerId}` : base
+}
+function hashToView(h: string): { view: View; player?: number } | null {
+  const parts = h.replace(/^#\/?/, '').split('/').filter(Boolean)
+  if (!parts.length) return null
+  const [kind, a, b, c] = parts
+  let view: View | null = null, rest: string[] = []
+  if ((kind === 'league' || kind === 'club') && /^\d+$/.test(a ?? '')) { view = { kind, id: +a }; rest = [b, c] }
+  else if ((SIMPLE_VIEWS as readonly string[]).includes(kind)) { view = { kind } as View; rest = [a, b] }
+  if (!view) return null
+  return { view, player: rest[0] === 'p' && /^\d+$/.test(rest[1] ?? '') ? +rest[1] : undefined }
+}
+const OPEN_KEY = 'fc26-open-save'
+function rememberOpen(gameId: string, snapId: string) { try { localStorage.setItem(OPEN_KEY, JSON.stringify({ gameId, snapId })) } catch {} }
+function recallOpen(): { gameId: string; snapId: string } | null { try { const v = JSON.parse(localStorage.getItem(OPEN_KEY) ?? 'null'); return v && typeof v.gameId === 'string' && typeof v.snapId === 'string' ? v : null } catch { return null } }
+function forgetOpen() { try { localStorage.removeItem(OPEN_KEY) } catch {} }
 export default function App() {
   const loadingFile = useRef(false)
   const [game, setGame] = useState<Game | null>(null)
   const themeCtl = useTheme()
-  useEffect(() => { listGames().then(gs => { let active = ''; try { active = localStorage.getItem('fc26-active-game') ?? '' } catch {} setGame(gs.find(g => g.id === active) ?? gs[0] ?? null) }).catch(e => setErr(String(e))) }, [])
+  const fromHash = useRef(hashToView(location.hash))
+  const [reopening, setReopening] = useState(() => !!recallOpen())
+  useEffect(() => { listGames().then(async gs => {
+    let active = ''; try { active = localStorage.getItem('fc26-active-game') ?? '' } catch {}
+    const open = recallOpen(), g = (open && gs.find(x => x.id === open.gameId)) || gs.find(x => x.id === active) || gs[0] || null
+    setGame(g)
+    // Reopen the save this browser last had open, so a new or refreshed tab skips the loading page.
+    if (open && g && g.id === open.gameId) {
+      try { const f = await getSavedFile(open.snapId); if (f) await load(new File([f.data], f.name), open.snapId, g, true) } catch {}
+    }
+    setReopening(false)
+  }).catch(e => { setErr(String(e)); setReopening(false) }) }, [])
   useEffect(() => { if (game) try { localStorage.setItem('fc26-active-game', game.id) } catch {} }, [game?.id])
   const [world, setWorld] = useState<World | null>(null)
   const [fileName, setFileName] = useState('')
@@ -121,6 +155,20 @@ export default function App() {
   const [snapId, setSnapId] = useState<string>()
   const [snapTick, setSnapTick] = useState(0)
   const prev = usePrevSnapshot(game?.id, snapId, snapTick)
+  useEffect(() => {
+    if (!world) return
+    const h = viewToHash(view, sel?.id)
+    if (location.hash !== h) history.pushState(null, '', h)
+  }, [world, view, sel?.id])
+  useEffect(() => {
+    const onPop = () => {
+      const t = hashToView(location.hash)
+      if (!t || !world) return
+      setView(t.view); setSel(t.player ? world.playerById.get(t.player) ?? null : null)
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [world])
   const [, bump] = useState(0)
   const rename = (p: Player) => {
     const v = window.prompt(`Name for player #${p.id}${p.known ? ` (currently "${p.name}")` : ''}. Leave empty to reset.`, p.known ? p.name : '')
@@ -141,7 +189,7 @@ export default function App() {
   }
   function selectGame(g: Game) { if (g.id !== game?.id) { setWorld(null); setSel(null); setSnapId(undefined) }; setGame(g) }
   async function toggle(id: number) { if (!game) return; try { const g = await toggleTarget(game.id, id); setGame({ ...g }); } catch (e) { setErr(String(e)) } }
-  async function load(file: File, existingId?: string, selectedGame?: Game) {
+  async function load(file: File, existingId?: string, selectedGame?: Game, restoring = false) {
     if (loadingFile.current) return
     loadingFile.current = true
     setErr(''); setBusy('Reading save…')
@@ -157,14 +205,20 @@ export default function App() {
       if (!tables.players?.length) throw new Error('No player table was found in this save.')
       const existing = existingId ? await getSnapshot(existingId) : undefined
       const w = buildWorld(tables, assets.current!.names, assets.current!.nations, assets.current!.vm, loadOverrides())
-      if (existingId) { setSnapId(existingId); if (existing) await saveSnapshot({ ...fromWorld(w, file.name, active.id), id: existing.id, order: existing.order, label: existing.label, savedAt: existing.savedAt }) }
-      else { const s = fromWorld(w, file.name, active.id); await saveWithFile(s, buf); setSnapId(s.id); setSnapTick(x => x + 1) }
-      setGame(active); setSel(null); setWorld(w); setFileName(file.name); setView(w.career.mode === 'player' && w.career.me ? { kind: 'me' } : w.career.club ? { kind: 'my' } : { kind: 'leagues' })
+      if (existingId) { setSnapId(existingId); rememberOpen(active.id, existingId); if (existing && !restoring) await saveSnapshot({ ...fromWorld(w, file.name, active.id), id: existing.id, order: existing.order, label: existing.label, savedAt: existing.savedAt }) }
+      else { const s = fromWorld(w, file.name, active.id); await saveWithFile(s, buf); setSnapId(s.id); rememberOpen(active.id, s.id); setSnapTick(x => x + 1) }
+      const home: View = w.career.mode === 'player' && w.career.me ? { kind: 'me' } : w.career.club ? { kind: 'my' } : { kind: 'leagues' }
+      // A reopened tab goes back to the screen in its address; a freshly opened save starts at home.
+      const target = restoring ? fromHash.current : null
+      const valid = target && (target.view.kind !== 'club' || w.teamById.has(target.view.id)) && (target.view.kind !== 'league' || w.leagues.some(l => l.id === (target.view as { id: number }).id))
+      setGame(active); setWorld(w); setFileName(file.name)
+      setView(valid ? target!.view : home); setSel(valid && target!.player ? w.playerById.get(target!.player) ?? null : null)
     } catch (e: any) { setErr(e.message || String(e)) }
     setBusy(''); loadingFile.current = false
   }
 
   const gamePanel = <fieldset className="game-controls" disabled={!!busy}><Games active={game} onSelect={selectGame} onLoad={load} refresh={snapTick} /></fieldset>
+  if (!world && reopening) return <div className="landing reopening"><div className="hero"><div><h1>FC26 Manager Companion</h1><p className="sub" role="status" style={{ margin: 0 }}>{busy || 'Reopening your save…'}</p></div></div><div className="reopen-bar"><i /></div></div>
   if (!world) return <div className="landing">
     <div className="hero"><div><h1>FC26 Manager Companion</h1><p className="sub" style={{ margin: 0 }}>Open a career save and browse every league, club and player in your world — ratings, potential, values, contracts and how they change save by save.</p></div><ThemeButton t={themeCtl} /></div>
     <div className="grid">
@@ -186,12 +240,13 @@ export default function App() {
           {c.me && <button className={view.kind === 'me' ? 'on' : ''} onClick={() => setView({ kind: 'me' })}>My player</button>}
           {c.club && <button className={view.kind === 'my' ? 'on' : ''} onClick={() => setView({ kind: 'my' })}>My club</button>}
           <button className={view.kind === 'leagues' || view.kind === 'league' ? 'on' : ''} onClick={() => setView({ kind: 'leagues' })}>Leagues &amp; clubs</button>
+          <button className={view.kind === 'rankings' ? 'on' : ''} onClick={() => setView({ kind: 'rankings' })}>Strongest clubs</button>
           <button className={view.kind === 'players' ? 'on' : ''} onClick={() => setView({ kind: 'players' })}>Player search</button>
           <button className={view.kind === 'market' ? 'on' : ''} onClick={() => setView({ kind: 'market' })}>Market finder</button>
           <button className={view.kind === 'transfers' ? 'on' : ''} onClick={() => setView({ kind: 'transfers' })}>Transfers</button>
           <button className={view.kind === 'snapshots' ? 'on' : ''} onClick={() => setView({ kind: 'snapshots' })}>Snapshots &amp; compare</button>
         </nav>
-        <div className="foot">{world.players.length.toLocaleString()} players · {world.teams.length} clubs · {world.leagues.length} leagues<br />Values are estimates from the game's rating curve; wages are shown only where the save holds a contract. In-game date is inferred from the latest event in the save.<div style={{ display: 'flex', gap: 8, marginBottom: 12 }}><ThemeButton t={themeCtl} /><button style={{ margin: 0 }} onClick={() => { setWorld(null); setView({ kind: 'leagues' }) }}>New save</button></div><label className="logo-toggle"><input type="checkbox" defaultChecked={logosEnabled()} onChange={e => { setLogosEnabled(e.target.checked); location.reload() }} /> Club crests</label></div>
+        <div className="foot">{world.players.length.toLocaleString()} players · {world.teams.length} clubs · {world.leagues.length} leagues<br />Values are estimates from the game's rating curve; wages are shown only where the save holds a contract. In-game date is inferred from the latest event in the save.<div style={{ display: 'flex', gap: 8, marginBottom: 12 }}><ThemeButton t={themeCtl} /><button style={{ margin: 0 }} onClick={() => { forgetOpen(); setWorld(null); setSel(null); setView({ kind: 'leagues' }); history.pushState(null, '', location.pathname) }}>New save</button></div><label className="logo-toggle"><input type="checkbox" defaultChecked={logosEnabled()} onChange={e => { setLogosEnabled(e.target.checked); location.reload() }} /> Club crests</label></div>
       </aside>
       <main className="main">
         {err && <p className="err" role="alert">{err}</p>}{busy && <p role="status">{busy}</p>}
@@ -200,6 +255,7 @@ export default function App() {
         {view.kind === 'leagues' && <Leagues world={world} open={id => setView({ kind: 'league', id })} />}
         {view.kind === 'league' && <LeagueView league={world.leagues.find(l => l.id === view.id)!} back={() => setView({ kind: 'leagues' })} open={id => setView({ kind: 'club', id })} userClub={c.clubId} pick={setSel} world={world} />}
         {view.kind === 'club' && <ClubView team={world.teamById.get(view.id)!} world={world} back={() => setView({ kind: 'league', id: world.teamById.get(view.id)!.leagueId })} pick={setSel} />}
+        {view.kind === 'rankings' && <Rankings world={world} prevTeams={prev?.teams} prevLabel={prev?.label} openClub={id => setView({ kind: 'club', id })} pick={setSel} />}
         {view.kind === 'players' && <Search world={world} pick={setSel} openClub={id => setView({ kind: 'club', id })} />}
         {view.kind === 'market' && <Market world={world} prev={prev?.map ?? null} openClub={id => setView({ kind: 'club', id })} pick={setSel} />}
         {view.kind === 'transfers' && <Transfers world={world} gameId={game?.id} refresh={snapTick} openClub={id => setView({ kind: 'club', id })} pick={id => { const p = world.playerById.get(id); if (p) setSel(p) }} />}

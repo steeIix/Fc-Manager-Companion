@@ -166,3 +166,18 @@ The game's stored team overall is only recalculated at certain moments (a new se
 4. **Depth** 10% – average of the best seven left on the bench.
 
 Stars: 5 from 85.5, 4½ from 81.5, 4 from 77.5, 3½ from 73.5, 3 from 71, 2½ from 69, 2 from 67, 1½ from 65, 1 from 62.5. The thresholds were set so the number of clubs at each star level roughly matches the game; after that they follow the squad. The scale is ~3 points above the game's own (it is a straight average of the players), so the club page shows both figures, plus world and league rank and a "How it's rated" breakdown of the XI and the formula. League tables gain an **In-game** column. Snapshots store both numbers (`cr` = Companion rating); comparisons use it when both saves have it.
+
+## Strongest clubs
+
+A world ranking of every real league club by squad rating (`src/Rankings.tsx`), with a men/women switch, a league filter and Top 25/50/100/All.
+- **Star tiers:** tiles at the top count how many clubs sit at each star level, and clicking one filters to that tier. The list is split under star-tier headings.
+- **Podium:** the top three get cards with rating, stars, ATT/MID/DEF/GK lines and their three star players.
+- **List rows:** every row shows the club's three best players as chips (click one to open the player).
+- **Your club:** highlighted, with its rank in the bar.
+- **Movement:** snapshots now store each club's world rank (`rk`), so later saves show ▲/▼ rank movement and the change in rating against the previous save.
+
+## Tabs, refresh and links
+
+- **Reopening:** the app remembers which save this browser has open (`fc26-open-save` in localStorage) and reopens it from the file already stored in IndexedDB. A duplicated tab, a new tab or a refresh skips the loading page. **New save** forgets it.
+- **Links:** the current screen is kept in the address (`#/club/123`, `#/league/16`, `#/rankings`, `/p/<playerId>` when a player is open). A duplicated tab lands on the same page, links can be bookmarked or middle-clicked, and the browser's back/forward buttons move between screens.
+- **Storage:** everything stays in this browser, so a different browser or device still starts at the loading page.
