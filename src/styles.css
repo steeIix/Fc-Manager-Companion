@@ -680,3 +680,6 @@ h1 .pencil { font-size: 14px; padding: 3px 7px; margin: 0 8px 0 0; vertical-alig
 .reopen-bar { height: 3px; background: var(--line); overflow: hidden; border-radius: 2px; max-width: 420px; }
 .reopen-bar i { display: block; height: 100%; width: 35%; background: var(--club); animation: reopenSlide 1.1s ease-in-out infinite; }
 @keyframes reopenSlide { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+.nation-cell { white-space: nowrap; }
+.nation-cell .text-btn { text-decoration: none; color: var(--ink-2); }
+.nation-cell .text-btn:hover { color: var(--club); text-decoration: underline; text-underline-offset: 3px; }

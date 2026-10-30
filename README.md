@@ -181,3 +181,8 @@ A world ranking of every real league club by squad rating (`src/Rankings.tsx`), 
 - **Reopening:** the app remembers which save this browser has open (`fc26-open-save` in localStorage) and reopens it from the file already stored in IndexedDB. A duplicated tab, a new tab or a refresh skips the loading page. **New save** forgets it.
 - **Links:** the current screen is kept in the address (`#/club/123`, `#/league/16`, `#/rankings`, `/p/<playerId>` when a player is open). A duplicated tab lands on the same page, links can be bookmarked or middle-clicked, and the browser's back/forward buttons move between screens.
 - **Storage:** everything stays in this browser, so a different browser or device still starts at the loading page.
+
+## Nationality
+
+- **Player search:** an *Any nationality* dropdown lists every country A–Z with its player count. A sortable **Nation** column sorts A–Z on the first click, with the best players first within each country. Clicking a player's country filters to it.
+- **Club squads:** a *Nationality* option in **Order by** groups the squad by country, largest group first (e.g. "Scotland · 10 players"). In the other orders each player's nation shows under his name.
