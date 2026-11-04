@@ -186,3 +186,28 @@ A world ranking of every real league club by squad rating (`src/Rankings.tsx`), 
 
 - **Player search:** an *Any nationality* dropdown lists every country A–Z with its player count. A sortable **Nation** column sorts A–Z on the first click, with the best players first within each country. Clicking a player's country filters to it.
 - **Club squads:** a *Nationality* option in **Order by** groups the squad by country, largest group first (e.g. "Scotland · 10 players"). In the other orders each player's nation shows under his name.
+
+## Performance (v34)
+
+- **Loading a save:** about 6 s → about 2.5–3 s. The page stays responsive because decoding runs in a Web Worker (`src/loader.worker.ts`, `src/loader.ts`) with a main-thread fallback.
+  - The big win: dates were formatted with `toLocaleDateString(…options)`, which builds a new Intl formatter on every call (60k+ per load, about 3 s). One shared `Intl.DateTimeFormat` fixes it.
+  - Squad ratings reuse each club's fit table across the ten formations and use typed arrays.
+- **Snapshots:** previously every player card, timeline, the transfer feed and the Games page re-read *all* snapshots of *all* games from IndexedDB (22k players each). Now:
+  - each game's snapshots are read once per tab and shared;
+  - the cache is cleared on any write, including writes from other tabs via BroadcastChannel;
+  - the DB is at v4 with a `gameId` index, so only one game's saves are read.
+- **Per-player history:** looked up through a cached id map instead of scanning 22k rows per snapshot.
+- **Player search:**
+  - squad-depth analysis only runs when a depth filter or column is in use;
+  - typing is deferred (`useDeferredValue`);
+  - pages hold 50 rows;
+  - depth and line-up indexes are cached per save.
+- **Long lists:** Market finder and Transfers render 75 rows at a time with **Show more** (`src/ShowMore.tsx`). Transfer moves and Strongest clubs' star players are cached.
+- **Animations:**
+  - shorter animations, and only the first 12 table rows stagger;
+  - an **Animations** switch in the rail turns all motion off;
+  - the rail now scrolls on short screens.
+- **Storage:**
+  - Games & saves shows how much browser storage the Companion uses;
+  - **Free up space** removes the stored FC files (~15 MB each) of all but the latest three saves, keeping their snapshot data for comparisons;
+  - the app asks the browser to keep its storage persistent.

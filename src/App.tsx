@@ -1,10 +1,11 @@
 import { Table } from './Table'
-import React, { Fragment, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import React, { Fragment, createContext, useContext, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { parseSave, isCareerSave, type Meta } from './parser'
 import { Snapshots } from './Snapshots'
 import { Transfers } from './Transfers'
 import { Market } from './Market'
 import { Rankings } from './Rankings'
+import { buildInWorker } from './loader'
 import { fromWorld, saveWithFile, getSnapshot, getSavedFile, saveSnapshot, allSnapshots, setHistoryPosition, recoverFinish, historyKey, type HistoryFinish, listGames, toggleTarget, type Game } from './snapshots'
 import { Games, Timeline, Youth, Planner, Shortlist } from './Features'
 import { depthIndex, opportunity, lineupIndex, inSavedXI, suitors } from './planning'
@@ -74,7 +75,7 @@ function usePrevSnapshot(gameId: string | undefined, currentId: string | undefin
       const sorted = all.slice().sort((x, y) => (x.order ?? 0) - (y.order ?? 0))
       const i = sorted.findIndex(s => s.id === currentId)
       const p = i > 0 ? sorted[i - 1] : (currentId ? null : sorted[sorted.length - 1])
-      setPrev(p ? { map: new Map(p.players.map(x => [x.id, x])), teams: new Map(p.teams.map(x => [x.id, x])), label: `Save ${p.order ?? '?'}${p.label ? ` · ${p.label}` : ''}` } : null)
+      setPrev(p ? { map: new Map(p.players.map(x => [x.id, x] as const)), teams: new Map(p.teams.map(x => [x.id, x])), label: `Save ${p.order ?? '?'}${p.label ? ` · ${p.label}` : ''}` } : null)
     }).catch(() => setPrev(null))
     return () => { live = false }
   }, [gameId, currentId, tick])
@@ -108,6 +109,11 @@ function StarButton({ p }: { p: Player }) { const targets = useContext(TargetCon
 
 // The open screen lives in the URL hash (#/club/123/p/456) so a duplicated tab, a refresh or the
 // back button lands on the same page. The save itself is reopened from this browser's storage.
+
+// Animations can be switched off from the rail on slower machines.
+const motionOn = () => { try { return localStorage.getItem('fc26-motion') !== 'off' } catch { return true } }
+function setMotion(on: boolean) { try { localStorage.setItem('fc26-motion', on ? 'on' : 'off') } catch {} document.documentElement.dataset.motion = on ? 'on' : 'off' }
+if (typeof document !== 'undefined') document.documentElement.dataset.motion = motionOn() ? 'on' : 'off'
 const SIMPLE_VIEWS = ['market', 'transfers', 'games', 'shortlist', 'snapshots', 'leagues', 'players', 'my', 'me', 'rankings'] as const
 function viewToHash(v: View, playerId?: number) {
   const base = 'id' in v ? `#/${v.kind}/${v.id}` : `#/${v.kind}`
@@ -196,17 +202,20 @@ export default function App() {
     try {
       const active = selectedGame ?? game
       if (!active) throw new Error('Select or create a game before opening a save.')
-      await ensureAssets()
       const buf = await file.arrayBuffer()
       if (!isCareerSave(buf)) throw new Error('This file is not an FC 26 career save. Pick a file that starts with "CmMgr" from your settings folder.')
       setBusy('Decoding databases…')
-      await new Promise(r => setTimeout(r, 20))
-      const tables = parseSave(buf, assets.current!.meta)
-      if (!tables.players?.length) throw new Error('No player table was found in this save.')
-      const existing = existingId ? await getSnapshot(existingId) : undefined
-      const w = buildWorld(tables, assets.current!.names, assets.current!.nations, assets.current!.vm, loadOverrides())
+      // Heavy lifting happens in a worker; fall back to this thread if workers are unavailable.
+      const viaWorker = buildInWorker(buf, loadOverrides(), setBusy)
+      const w = viaWorker ? await viaWorker : await (async () => {
+        await ensureAssets(); await new Promise(r => setTimeout(r, 20))
+        const tables = parseSave(buf, assets.current!.meta)
+        if (!tables.players?.length) throw new Error('No player table was found in this save.')
+        return buildWorld(tables, assets.current!.names, assets.current!.nations, assets.current!.vm, loadOverrides())
+      })()
+      const existing = existingId && !restoring ? await getSnapshot(existingId) : undefined
       if (existingId) { setSnapId(existingId); rememberOpen(active.id, existingId); if (existing && !restoring) await saveSnapshot({ ...fromWorld(w, file.name, active.id), id: existing.id, order: existing.order, label: existing.label, savedAt: existing.savedAt }) }
-      else { const s = fromWorld(w, file.name, active.id); await saveWithFile(s, buf); setSnapId(s.id); rememberOpen(active.id, s.id); setSnapTick(x => x + 1) }
+      else { const s = fromWorld(w, file.name, active.id); await saveWithFile(s, buf); setSnapId(s.id); rememberOpen(active.id, s.id); setSnapTick(x => x + 1); navigator.storage?.persist?.().catch(() => {}) }
       const home: View = w.career.mode === 'player' && w.career.me ? { kind: 'me' } : w.career.club ? { kind: 'my' } : { kind: 'leagues' }
       // A reopened tab goes back to the screen in its address; a freshly opened save starts at home.
       const target = restoring ? fromHash.current : null
@@ -246,7 +255,7 @@ export default function App() {
           <button className={view.kind === 'transfers' ? 'on' : ''} onClick={() => setView({ kind: 'transfers' })}>Transfers</button>
           <button className={view.kind === 'snapshots' ? 'on' : ''} onClick={() => setView({ kind: 'snapshots' })}>Snapshots &amp; compare</button>
         </nav>
-        <div className="foot">{world.players.length.toLocaleString()} players · {world.teams.length} clubs · {world.leagues.length} leagues<br />Values are estimates from the game's rating curve; wages are shown only where the save holds a contract. In-game date is inferred from the latest event in the save.<div style={{ display: 'flex', gap: 8, marginBottom: 12 }}><ThemeButton t={themeCtl} /><button style={{ margin: 0 }} onClick={() => { forgetOpen(); setWorld(null); setSel(null); setView({ kind: 'leagues' }); history.pushState(null, '', location.pathname) }}>New save</button></div><label className="logo-toggle"><input type="checkbox" defaultChecked={logosEnabled()} onChange={e => { setLogosEnabled(e.target.checked); location.reload() }} /> Club crests</label></div>
+        <div className="foot">{world.players.length.toLocaleString()} players · {world.teams.length} clubs · {world.leagues.length} leagues<br />Values are estimates from the game's rating curve; wages are shown only where the save holds a contract. In-game date is inferred from the latest event in the save.<div style={{ display: 'flex', gap: 8, marginBottom: 12 }}><ThemeButton t={themeCtl} /><button style={{ margin: 0 }} onClick={() => { forgetOpen(); setWorld(null); setSel(null); setView({ kind: 'leagues' }); history.pushState(null, '', location.pathname) }}>New save</button></div><div className="toggles"><label className="logo-toggle"><input type="checkbox" defaultChecked={logosEnabled()} onChange={e => { setLogosEnabled(e.target.checked); location.reload() }} /> Club crests</label><label className="logo-toggle"><input type="checkbox" defaultChecked={motionOn()} onChange={e => setMotion(e.target.checked)} /> Animations</label></div></div>
       </aside>
       <main className="main">
         {err && <p className="err" role="alert">{err}</p>}{busy && <p role="status">{busy}</p>}
@@ -556,30 +565,37 @@ function MyClub({ world, open, pick, game, onGameChange }: { game: Game | null; 
 
 const R = ({ v, set }: { v: number[]; set: (v: number[]) => void }) => <><input type="number" value={v[0]} onChange={e => set([+e.target.value, v[1]])} /><span>–</span><input type="number" value={v[1]} onChange={e => set([v[0], +e.target.value])} /></>
 
+// World-wide indexes are rebuilt only when a new save is opened, not on every visit to a screen.
+const depthCache = new WeakMap<World, Map<boolean, ReturnType<typeof depthIndex>>>(), lineupCache = new WeakMap<World, ReturnType<typeof lineupIndex>>()
+function cachedDepth(w: World, secondary: boolean) { let m = depthCache.get(w); if (!m) depthCache.set(w, m = new Map()); let d = m.get(secondary); if (!d) m.set(secondary, d = depthIndex(w, secondary)); return d }
+function cachedLineups(w: World) { let l = lineupCache.get(w); if (!l) lineupCache.set(w, l = lineupIndex(w)); return l }
 function Search({ world, pick, openClub }: { world: World; pick: (p: Player) => void; openClub: (id: number) => void }) {
   const prev = useContext(PrevCtx)
   const [role, setRole] = useState('all'), [contract, setContract] = useState(''), [foot, setFoot] = useState(''), [minGrowth, setMinGrowth] = useState(''), [minSkill, setMinSkill] = useState(''), [minWeak, setMinWeak] = useState(''), [fit, setFit] = useState(false), [notLoan, setNotLoan] = useState(false)
   const [includeSecondary, setIncludeSecondary] = useState(false), [slotOverride, setSlotOverride] = useState(0), [minAhead, setMinAhead] = useState(0)
-  const depth = useMemo(() => depthIndex(world, includeSecondary), [world, includeSecondary])
-  const lineups = useMemo(() => lineupIndex(world), [world])
+  const depth = useMemo(() => cachedDepth(world, includeSecondary), [world, includeSecondary])
+  const lineups = useMemo(() => cachedLineups(world), [world])
   const youthIds = useMemo(() => new Set(world.youth.map(y => y.id)), [world])
   const [q, setQ] = useState(''); const [g, setG] = useState<'all' | 0 | 1>(0); const [pos, setPos] = useState('')
   const [adv, setAdv] = useState(false); const [arch, setArch] = useState(''); const [role2, setRole2] = useState(''); const [roleLvl, setRoleLvl] = useState<'any' | '++'>('any'); const [tag, setTag] = useState(''); const [ovr, setOvr] = useState([40, 99]); const [pot, setPot] = useState([40, 99]); const [age, setAge] = useState([15, 45]); const [lg, setLg] = useState(-2); const [nat, setNat] = useState(''); const [page, setPage] = useState(0)
   const specialLeagues = useMemo(() => new Set(world.leagues.filter(l => l.intl).map(l => l.id)), [world])
-  const opportunities = useMemo(() => new Map(world.players.map(p => [p.id, opportunity(depth, lineups, p, pos || p.pos, slotOverride)])), [world, depth, lineups, pos, slotOverride])
+  // Squad-depth analysis runs over every player, so only do it when a depth filter or column is in use.
+  const needDepth = adv || role !== 'all' || minAhead > 0
+  const opportunities = useMemo(() => needDepth ? new Map(world.players.map(p => [p.id, opportunity(depth, lineups, p, pos || p.pos, slotOverride)])) : new Map<number, ReturnType<typeof opportunity>>(), [world, depth, lineups, pos, slotOverride, needDepth])
+  const dq = useDeferredValue(q)
   const rows = useMemo(() => {
-    const s = q.trim().toLowerCase()
+    const s = dq.trim().toLowerCase()
     return world.players.filter(p => !youthIds.has(p.id) &&
       (!contract || (p.contractUntil > 0 && p.contractUntil <= Number(contract))) && (!foot || p.foot === foot) && (!minGrowth || p.pot - p.ovr >= Number(minGrowth)) && (!minSkill || p.skill >= Number(minSkill)) && (!minWeak || p.weak >= Number(minWeak)) && (!fit || !p.injury) && (!notLoan || !p.onLoanFrom) &&
-      opportunities.get(p.id)!.ahead.length >= minAhead && (role === 'all' || (role === 'backup' && opportunities.get(p.id)!.blocked) || (role === 'best' && opportunities.get(p.id)!.rank !== null && (opportunities.get(p.id)!.slots ?? 0) > 0 && !opportunities.get(p.id)!.blocked) || (role === 'buried' && opportunities.get(p.id)!.blocked && opportunities.get(p.id)!.ahead.length >= 2) || (role === 'bench' && p.teamId >= 0 && ['SUB','RES'].includes(p.squadPos)) || (role === 'xi' && p.teamId >= 0 && inSavedXI(p))) && (g === 'all' || p.gender === g) && (!pos || (pos.startsWith('G:') ? matchesPos(p, pos) : includeSecondary ? p.positions.includes(pos) : p.pos === pos)) && p.ovr >= ovr[0] && p.ovr <= ovr[1] && p.pot >= pot[0] && p.pot <= pot[1] && p.age >= age[0] && p.age <= age[1] && (!arch || p.archetype.id === arch) && (!role2 || p.roles.some(r => r.name === role2 && (roleLvl === 'any' || r.level === '++'))) && (!tag || p.archetype.tags.includes(tag)) && (lg === -2 ? !specialLeagues.has(p.leagueId) && !p.isYouth && !p.isSpecial : p.leagueId === lg) && (!nat || p.nation === nat) && (!s || p.name.toLowerCase().includes(s) || p.team.toLowerCase().includes(s) || p.nation.toLowerCase().includes(s)))
-  }, [world, q, g, pos, ovr, pot, age, arch, role2, roleLvl, tag, lg, nat, specialLeagues, role, contract, foot, minGrowth, minSkill, minWeak, fit, notLoan, depth, youthIds, opportunities, minAhead, includeSecondary])
+      (!needDepth || opportunities.get(p.id)!.ahead.length >= minAhead) && (role === 'all' || (role === 'backup' && opportunities.get(p.id)!.blocked) || (role === 'best' && opportunities.get(p.id)!.rank !== null && (opportunities.get(p.id)!.slots ?? 0) > 0 && !opportunities.get(p.id)!.blocked) || (role === 'buried' && opportunities.get(p.id)!.blocked && opportunities.get(p.id)!.ahead.length >= 2) || (role === 'bench' && p.teamId >= 0 && ['SUB','RES'].includes(p.squadPos)) || (role === 'xi' && p.teamId >= 0 && inSavedXI(p))) && (g === 'all' || p.gender === g) && (!pos || (pos.startsWith('G:') ? matchesPos(p, pos) : includeSecondary ? p.positions.includes(pos) : p.pos === pos)) && p.ovr >= ovr[0] && p.ovr <= ovr[1] && p.pot >= pot[0] && p.pot <= pot[1] && p.age >= age[0] && p.age <= age[1] && (!arch || p.archetype.id === arch) && (!role2 || p.roles.some(r => r.name === role2 && (roleLvl === 'any' || r.level === '++'))) && (!tag || p.archetype.tags.includes(tag)) && (lg === -2 ? !specialLeagues.has(p.leagueId) && !p.isYouth && !p.isSpecial : p.leagueId === lg) && (!nat || p.nation === nat) && (!s || p.name.toLowerCase().includes(s) || p.team.toLowerCase().includes(s) || p.nation.toLowerCase().includes(s)))
+  }, [world, dq, g, pos, ovr, pot, age, arch, role2, roleLvl, tag, lg, nat, specialLeagues, role, contract, foot, minGrowth, minSkill, minWeak, fit, notLoan, depth, youthIds, opportunities, minAhead, includeSecondary])
   const allTags = useMemo(() => Array.from(new Set(world.players.flatMap(p => p.archetype.tags))).sort(), [world])
   // Nationalities with player counts for the current gender, A–Z.
   const nations = useMemo(() => { const m = new Map<string, number>(); for (const p of world.players) if ((g === 'all' || p.gender === g) && !p.isSpecial && !p.isYouth) m.set(p.nation, (m.get(p.nation) ?? 0) + 1); return [...m].sort((a, b) => a[0].localeCompare(b[0])) }, [world, g])
   const showDepth = adv || role !== 'all' || minAhead > 0
   const { sorted, Th } = useSort(rows, 'ovr', (p, k) => (p as any)[k], true, rankOrder)
   useEffect(() => setPage(0), [rows])
-  const per = 100, pages = Math.ceil(sorted.length / per)
+  const per = 50, pages = Math.ceil(sorted.length / per)
   return <>
     <h1>Player search</h1>
     <p className="sub">Every player in the save. Search by name, club or nation; narrow by rating, potential, age, position and league. Open the squad-depth filters to find players stuck behind better options.</p>

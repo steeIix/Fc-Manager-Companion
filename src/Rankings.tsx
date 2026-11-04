@@ -12,7 +12,8 @@ const starLabel = (n: number) => `${Math.floor(n) || ''}${n % 1 ? '½' : ''} sta
 const TIERS = [...STAR_STEPS.map(([t, s]) => ({ s, from: t })), { s: 0.5, from: 0 }]
 
 /** A club's headline players: best three by the same order used for world rankings. */
-const starsOf = (t: Team, n = 3) => t.players.slice().sort(rankOrder).slice(0, n)
+const starCache = new WeakMap<Team, Player[]>()
+const starsOf = (t: Team, n = 3) => { let r = starCache.get(t); if (!r) { r = t.players.slice().sort(rankOrder).slice(0, 3); starCache.set(t, r) } return r.slice(0, n) }
 
 function StarPlayers({ t, pick, n = 3, big }: { t: Team; pick: (p: Player) => void; n?: number; big?: boolean }) {
   return <div className={'sp-list' + (big ? ' big' : '')}>{starsOf(t, n).map(p => <button key={p.id} className="sp" onClick={e => { e.stopPropagation(); pick(p) }} title={`${p.name} · ${p.pos} · ${p.ovr} OVR${p.rank ? ` · #${p.rank} in the world in his group` : ''} · ${p.classification.label}`}>

@@ -127,7 +127,10 @@ export function estimateValue(vm: ValueModel, ovr: number, age: number, pot: num
   const step = v >= 5e7 ? 1e6 : v >= 1e7 ? 5e5 : v >= 1e6 ? 1e5 : v >= 1e5 ? 1e4 : 1e3
   return Math.round(v / step) * step
 }
-export const fmtDate = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+// One shared formatter: toLocaleDateString with options builds a new Intl formatter on every call,
+// which cost ~3 seconds per save load across 60k+ dates.
+const DATE_FMT = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+export const fmtDate = (d: Date) => DATE_FMT.format(d)
 export function fmtMoney(v: number | null | undefined) {
   if (v == null || !Number.isFinite(v)) return '—'
   if (v >= 1e9) return `€${(v / 1e9).toFixed(2)}B`

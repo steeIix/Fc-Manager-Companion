@@ -1,3 +1,4 @@
+import { useShowMore } from './ShowMore'
 import { useContext, useMemo, useState } from 'react'
 import { Table } from './Table'
 import { fmtMoney, posGroup, matchesPos, rankOrder, POS_ORDER, POS_GROUPS, type World, type Player, type Team } from './model'
@@ -58,6 +59,7 @@ export function Market({ world, prev, openClub, pick }: { world: World; prev: Ma
   const starLabel = lens === 'gems' ? 'Club at most' : 'Club at least'
   const showStars = lens === 'expiring' || lens === 'gems'
 
+  const { visible, more } = useShowMore(rows)
   return <>
     <h1>Market finder</h1>
     <p className="sub">Ready-made searches for the players worth chasing. Everything respects the save's date, so "expiring" means expiring in this season.</p>
@@ -82,7 +84,7 @@ export function Market({ world, prev, openClub, pick }: { world: World; prev: Ma
         <th className="num">#</th><th>Player</th><th>Pos</th><th className="num">Age</th><th>Club</th><th className="num">OVR</th><th className="num">POT</th><th className="num">Value</th>
         <th>{lens === 'expiring' ? 'Contract' : lens === 'gems' ? 'Growth' : lens === 'drops' ? 'Since last save' : lens === 'stuck' ? 'Behind' : 'Was at'}</th>
       </tr></thead><tbody>
-        {rows.slice(0, 200).map((p, i) => {
+        {visible.map((p, i) => {
           const team = world.teamById.get(p.teamId)
           const was = prev?.get(p.id)
           const blocker = lens === 'stuck' ? team?.players.filter(q => q.id !== p.id && q.pos === p.pos).sort((a, b) => b.ovr - a.ovr)[0] : undefined
@@ -105,5 +107,6 @@ export function Market({ world, prev, openClub, pick }: { world: World; prev: Ma
           </tr>
         })}
       </tbody></Table>}
+    {rows.length > 0 && more}
   </>
 }

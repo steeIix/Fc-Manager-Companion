@@ -11,20 +11,22 @@ export interface SavedFile { id: string; gameId: string; name: string; data: Arr
 const DB = 'fc26-companion'
 export function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const r = indexedDB.open(DB, 3)
+    const r = indexedDB.open(DB, 4)
     r.onupgradeneeded = () => {
       const db = r.result
       if (!db.objectStoreNames.contains('snapshots')) db.createObjectStore('snapshots', { keyPath: 'id' })
       if (!db.objectStoreNames.contains('games')) db.createObjectStore('games', { keyPath: 'id' }).put({ id: 'legacy', name: 'My first game / existing snapshots', createdAt: Date.now(), shortlist: [] })
       if (!db.objectStoreNames.contains('files')) db.createObjectStore('files', { keyPath: 'id' })
       const store = r.transaction!.objectStore('snapshots'), all = store.getAll()
+      // v4: index snapshots by game so a game's saves load without reading every other game's.
+      if (!store.indexNames.contains('gameId')) store.createIndex('gameId', 'gameId')
       all.onsuccess = () => {
         const counts = new Map<string,number>()
         const sorted = (all.result as Snapshot[]).sort((a,b) => a.savedAt - b.savedAt || a.id.localeCompare(b.id))
-        for (const s of sorted) { const gameId = s.gameId || 'legacy', order = (counts.get(gameId) ?? 0) + 1; counts.set(gameId,order); store.put(recordedSnapshot({ ...s, order })) }
+        for (const s of sorted) { const gameId = s.gameId || 'legacy', order = (counts.get(gameId) ?? 0) + 1; counts.set(gameId,order); store.put(recordedSnapshot({ ...s, gameId, order })) }
       }
     }
-    r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error)
+    r.onsuccess = () => { r.result.onversionchange = () => r.result.close(); resolve(r.result) }; r.onerror = () => reject(r.error)
     r.onblocked = () => reject(new Error('Close other Companion tabs, then try again.'))
   })
 }
@@ -46,21 +48,42 @@ export function fromWorld(w: World, fileName: string, gameId = 'legacy'): Snapsh
     history: c.history.map(h => ({ season: Number(h.season), team: Number(h.teamid), league: Number(h.leagueid), position: Number(h.tableposition), completed: Number(h.season) < c.season })),
     teams: w.teams.map(t => ({ id: t.id, n: t.name, ovr: t.game.ovr, v: t.squadValue, lg: t.league, ...(t.rating ? { cr: t.rating.score } : {}), ...(t.ratingRank ? { rk: t.ratingRank } : {}) })) }
 }
-export const saveSnapshot = (s: Snapshot) => tx('snapshots', 'readwrite', st => st.put(recordedSnapshot(s)))
-export const saveWithFile = (s: Snapshot, data: ArrayBuffer) => transact(['snapshots', 'files'], 'readwrite', t => {
-  const store = t.objectStore('snapshots'), request = store.getAll()
-  request.addEventListener('success', () => {
-    const all = request.result as Snapshot[], existing = all.find(x => x.id === s.id)
-    const order = existing?.order ?? (Math.max(0,...all.filter(x => (x.gameId || 'legacy') === (s.gameId || 'legacy')).map(x => x.order ?? 0)) + 1)
-    store.put(recordedSnapshot({ ...s, order }))
+export const saveSnapshot = (s: Snapshot) => tx('snapshots', 'readwrite', st => st.put(recordedSnapshot({ ...s, gameId: s.gameId || 'legacy' }))).finally(invalidateSnapshots)
+export const saveWithFile = async (s: Snapshot, data: ArrayBuffer) => {
+  const gameId = s.gameId || 'legacy', mine = await allSnapshots(gameId)
+  const order = mine.find(x => x.id === s.id)?.order ?? Math.max(0, ...mine.map(x => x.order ?? 0)) + 1
+  return transact(['snapshots', 'files'], 'readwrite', t => {
     t.objectStore('files').put({ id: s.id, gameId: s.gameId, name: s.fileName, data })
-  })
-  return request
-})
-export const deleteSnapshot = (id: string) => transact(['snapshots', 'files'], 'readwrite', t => { t.objectStore('files').delete(id); return t.objectStore('snapshots').delete(id) })
+    return t.objectStore('snapshots').put(recordedSnapshot({ ...s, gameId, order }))
+  }).finally(invalidateSnapshots)
+}
+export const deleteSnapshot = (id: string) => transact(['snapshots', 'files'], 'readwrite', t => { t.objectStore('files').delete(id); return t.objectStore('snapshots').delete(id) }).finally(invalidateSnapshots)
 export const getSnapshot = (id: string) => tx<Snapshot | undefined>('snapshots', 'readonly', st => st.get(id))
 export const getSavedFile = (id: string) => tx<SavedFile | undefined>('files', 'readonly', st => st.get(id))
-export async function allSnapshots(gameId = 'legacy') { return (await tx<Snapshot[]>('snapshots', 'readonly', st => st.getAll())).filter(s => (s.gameId || 'legacy') === gameId).sort((a,b) => (a.order ?? 0) - (b.order ?? 0) || a.savedAt - b.savedAt || a.id.localeCompare(b.id)) }
+/** Which of these snapshots still have their original save file stored (reads keys only). */
+export async function storedFileIds(): Promise<Set<string>> { return new Set((await tx<IDBValidKey[]>('files', 'readonly', st => st.getAllKeys())).map(String)) }
+/** Remove stored save files (15 MB each); the snapshots' comparison data stays. */
+export const dropSavedFiles = (ids: string[]) => transact(['files'], 'readwrite', t => { const st = t.objectStore('files'); for (const id of ids.slice(1)) st.delete(id); return st.delete(ids[0]) })
+// Snapshots are large (every player in the world), so each game's list is read from IndexedDB once
+// per tab and shared by every screen; any write clears it here and, via BroadcastChannel, in other tabs.
+const cache = new Map<string, Promise<Snapshot[]>>()
+const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('fc26-snapshots') : null
+channel?.addEventListener('message', () => cache.clear())
+export function invalidateSnapshots() { cache.clear(); channel?.postMessage('changed') }
+const bySnapshotOrder = (a: Snapshot, b: Snapshot) => (a.order ?? 0) - (b.order ?? 0) || a.savedAt - b.savedAt || a.id.localeCompare(b.id)
+export function allSnapshots(gameId = 'legacy'): Promise<Snapshot[]> {
+  let hit = cache.get(gameId)
+  if (!hit) {
+    hit = tx<Snapshot[]>('snapshots', 'readonly', st => st.indexNames.contains('gameId') ? st.index('gameId').getAll(gameId) : st.getAll())
+      .then(all => all.filter(s => (s.gameId || 'legacy') === gameId).sort(bySnapshotOrder))
+    hit.catch(() => cache.delete(gameId))
+    cache.set(gameId, hit)
+  }
+  return hit
+}
+/** A snapshot's players by id (built once per snapshot). */
+const playerMaps = new WeakMap<Snapshot, Map<number, PSnap>>()
+export function snapPlayer(s: Snapshot, id: number) { let m = playerMaps.get(s); if (!m) { m = new Map(s.players.map(p => [p.id, p])); playerMaps.set(s, m) } return m.get(id) }
 export async function listSnapshots(gameId = 'legacy'): Promise<SnapMeta[]> { return (await allSnapshots(gameId)).map(({ players, teams, ...m }) => ({ ...m, playerCount: players.length })) }
 export async function renameSnapshot(id: string, label: string) { const s = await getSnapshot(id); if (s) await saveSnapshot({ ...s, label }) }
 export const listGames = () => tx<Game[]>('games', 'readonly', s => s.getAll())
@@ -74,7 +97,7 @@ export async function toggleTarget(gameId: string, id: number) {
 }
 export async function exportGame(game: Game) {
   const snapshots = await allSnapshots(game.id)
-  const files = (await tx<SavedFile[]>('files', 'readonly', s => s.getAll())).filter(f => f.gameId === game.id)
+  const files = (await Promise.all(snapshots.map(s => getSavedFile(s.id)))).filter((f): f is SavedFile => !!f)
   const encoded = await Promise.all(files.map(f => new Promise<{ id: string; name: string; data: string }>((resolve, reject) => {
     const r = new FileReader(); r.onerror = () => reject(r.error); r.onload = () => resolve({ id: f.id, name: f.name, data: String(r.result).split(',')[1] }); r.readAsDataURL(new Blob([f.data]))
   })))
@@ -111,6 +134,7 @@ export async function importGame(text: string): Promise<Game> {
     for (const f of files) t.objectStore('files').put(f)
     return t.objectStore('games').put(g)
   })
+  invalidateSnapshots()
   return g
 }
 

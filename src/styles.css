@@ -82,19 +82,21 @@ h3, .h3 { font-size: 17px; margin: 14px 0 8px; }
 @keyframes fcBar  { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 @keyframes fcGrow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
-.main > *, .games-panel, .landing { animation: fcUp .3s ease-out both; }
+.main > *, .games-panel, .landing { animation: fcUp .18s ease-out both; }
 
 /* staggered row reveal — no JS, first 24 rows */
-.tbl tbody tr { animation: fcRow .34s ease-out both; }
-.tbl tbody tr:nth-child(1){animation-delay:0ms}   .tbl tbody tr:nth-child(2){animation-delay:28ms}
-.tbl tbody tr:nth-child(3){animation-delay:56ms}  .tbl tbody tr:nth-child(4){animation-delay:84ms}
-.tbl tbody tr:nth-child(5){animation-delay:112ms} .tbl tbody tr:nth-child(6){animation-delay:140ms}
-.tbl tbody tr:nth-child(7){animation-delay:168ms} .tbl tbody tr:nth-child(8){animation-delay:196ms}
-.tbl tbody tr:nth-child(9){animation-delay:224ms} .tbl tbody tr:nth-child(10){animation-delay:252ms}
-.tbl tbody tr:nth-child(11){animation-delay:280ms}.tbl tbody tr:nth-child(12){animation-delay:308ms}
-.tbl tbody tr:nth-child(n+13){animation-delay:336ms}
+.tbl tbody tr { animation: fcRow .22s ease-out both; }
+.tbl tbody tr:nth-child(1){animation-delay:0ms}   .tbl tbody tr:nth-child(2){animation-delay:14ms}
+.tbl tbody tr:nth-child(3){animation-delay:28ms}  .tbl tbody tr:nth-child(4){animation-delay:42ms}
+.tbl tbody tr:nth-child(5){animation-delay:56ms} .tbl tbody tr:nth-child(6){animation-delay:70ms}
+.tbl tbody tr:nth-child(7){animation-delay:84ms} .tbl tbody tr:nth-child(8){animation-delay:98ms}
+.tbl tbody tr:nth-child(9){animation-delay:112ms} .tbl tbody tr:nth-child(10){animation-delay:126ms}
+.tbl tbody tr:nth-child(11){animation-delay:140ms}.tbl tbody tr:nth-child(12){animation-delay:154ms}
+.tbl tbody tr:nth-child(n+13){animation:none}
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+/* Rail toggle: Animations off */
+:root[data-motion=off] *, :root[data-motion=off] *::before, :root[data-motion=off] *::after { animation: none !important; transition: none !important; }
 
 /* ── layout ────────────────────────────────────────────────────────────── */
 .shell { display: grid; grid-template-columns: 248px minmax(0,1fr); min-height: 100%; }
@@ -683,3 +685,10 @@ h1 .pencil { font-size: 14px; padding: 3px 7px; margin: 0 8px 0 0; vertical-alig
 .nation-cell { white-space: nowrap; }
 .nation-cell .text-btn { text-decoration: none; color: var(--ink-2); }
 .nation-cell .text-btn:hover { color: var(--club); text-decoration: underline; text-underline-offset: 3px; }
+.storage-box { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between; margin: 20px 0 8px; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--radius, 8px); font-size: 13.5px; line-height: 1.5; }
+.storage-box > div { flex: 1 1 320px; }
+.show-more { display: flex; align-items: center; gap: 14px; margin: 14px 0 4px; font-size: 13px; }
+/* The rail scrolls when the window is shorter than its content (footer toggles stay reachable). */
+@media (min-width: 901px) { .rail { overflow-y: auto; overscroll-behavior: contain; } }
+.rail .toggles { display: flex; gap: 14px; flex-wrap: wrap; }
+.rail .toggles .logo-toggle { margin-bottom: 0; }

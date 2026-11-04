@@ -57,19 +57,20 @@ export function fitAt(p: Player, slot: string): { eff: number; fit: 'main' | 'se
   return { eff: p.ovr - 12, fit: 'out' }
 }
 
-/** Maximum-weight assignment (Hungarian, slots × players with empty columns). */
-function assign(players: Player[], slots: string[]) {
-  const n = slots.length, m = players.length + n
-  const fits = slots.map(s => players.map(p => fitAt(p, s).eff))
-  const cost = (i: number, j: number) => j >= players.length ? -EMPTY : -fits[i][j]
-  const u = Array(n + 1).fill(0), v = Array(m + 1).fill(0), pp = Array(m + 1).fill(0), way = Array(m + 1).fill(0)
+/** Maximum-weight assignment (Hungarian, slots × players with empty columns). `row(slot)` gives each
+ *  player's effective rating in that slot; rows are cached per club, so ten formations share them. */
+function assign(players: Player[], slots: string[], row: (slot: string) => Float64Array) {
+  const n = slots.length, np = players.length, m = np + n
+  const fits = slots.map(row)
+  const u = new Float64Array(n + 1), v = new Float64Array(m + 1), pp = new Int32Array(m + 1), way = new Int32Array(m + 1)
+  const min = new Float64Array(m + 1), used = new Uint8Array(m + 1)
   for (let i = 1; i <= n; i++) {
     pp[0] = i; let j0 = 0
-    const min = Array(m + 1).fill(Infinity), used = Array(m + 1).fill(false)
+    min.fill(Infinity); used.fill(0)
     do {
-      used[j0] = true; const i0 = pp[j0]; let delta = Infinity, j1 = 0
+      used[j0] = 1; const i0 = pp[j0], fr = fits[i0 - 1], ui = u[i0]; let delta = Infinity, j1 = 0
       for (let j = 1; j <= m; j++) if (!used[j]) {
-        const cur = cost(i0 - 1, j - 1) - u[i0] - v[j]
+        const cur = (j - 1 >= np ? -EMPTY : -fr[j - 1]) - ui - v[j]
         if (cur < min[j]) { min[j] = cur; way[j] = j0 }
         if (min[j] < delta) { delta = min[j]; j1 = j }
       }
@@ -79,7 +80,7 @@ function assign(players: Player[], slots: string[]) {
     do { const j1 = way[j0]; pp[j0] = pp[j1]; j0 = j1 } while (j0)
   }
   const out: (Player | undefined)[] = Array(n).fill(undefined)
-  for (let j = 1; j <= players.length; j++) if (pp[j]) out[pp[j] - 1] = players[j - 1]
+  for (let j = 1; j <= np; j++) if (pp[j]) out[pp[j] - 1] = players[j - 1]
   return out
 }
 
@@ -97,9 +98,11 @@ const r1 = (x: number) => Math.round(x * 10) / 10
 export function rateTeam(players: Player[]): TeamRating {
   // Cheap pre-filter: nobody outside a club's best 30 can make its XI.
   const pool = players.slice().sort((a, b) => b.ovr - a.ovr).slice(0, 30)
+  const rows = new Map<string, Float64Array>()
+  const row = (slot: string) => { let r = rows.get(slot); if (!r) { r = Float64Array.from(pool, p => fitAt(p, slot).eff); rows.set(slot, r) } return r }
   let best: { f: string; xi: XISlot[]; total: number } | null = null
   for (const [f, slots] of Object.entries(RATING_FORMATIONS)) {
-    const picked = assign(pool, slots)
+    const picked = assign(pool, slots, row)
     const xi: XISlot[] = slots.map((slot, i) => {
       const p = picked[i]
       if (!p) return { slot, line: LINE_OF[slot], eff: EMPTY, fit: 'empty' }

@@ -1,3 +1,4 @@
+import { useShowMore } from './ShowMore'
 import { useEffect, useMemo, useState } from 'react'
 import { Table } from './Table'
 import { fmtDate, fmtMoney, posGroup, matchesPos, POS_ORDER, POS_GROUPS, type World, type Team } from './model'
@@ -43,6 +44,9 @@ function ClubLink({ id, name, world, open }: { id: number; name: string; world: 
 }
 
 /** Squad changes between consecutive saves, enriched with the game's own dated news rows. */
+// The snapshot list is shared (see snapshots.ts), so the moves can be kept until a save is added.
+const moveCache = new WeakMap<object, WeakMap<World, ReturnType<typeof buildMoves>>>()
+function cachedMoves(snaps: Snapshot[], world: World) { let m = moveCache.get(snaps); if (!m) moveCache.set(snaps, m = new WeakMap()); let r = m.get(world); if (!r) m.set(world, r = buildMoves(snaps, world)); return r }
 export function buildMoves(snaps: Snapshot[], world: World): Move[] {
   const ordered = snaps.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
   const moves: Move[] = []
@@ -101,7 +105,7 @@ export function Transfers({ world, gameId, refresh, openClub, pick }: { world: W
   const [win, setWin] = useState<string>('latest')
   useEffect(() => { if (gameId) allSnapshots(gameId).then(setSnaps).catch(() => setSnaps([])) }, [gameId, refresh])
 
-  const moves = useMemo(() => buildMoves(snaps, world), [snaps, world])
+  const moves = useMemo(() => cachedMoves(snaps, world), [snaps, world])
   const ordered = useMemo(() => snaps.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)), [snaps])
   // Each import adds a window; by default only the newest one is shown so old transfers don't pile up.
   const windows = useMemo(() => ordered.slice(1).map((s, i) => ({ key: s.id, label: `${ordered[i].label || `Save ${ordered[i].order ?? '?'}`} → ${s.label || `Save ${s.order ?? '?'}`}` })).reverse(), [ordered])
@@ -118,6 +122,7 @@ export function Transfers({ world, gameId, refresh, openClub, pick }: { world: W
   const clubs = useMemo(() => world.teams.filter(t => t.leagueId >= 0 && t.gender === gender && !t.isSpecial && !t.isYouth && !t.isFreeAgentPool).sort((a, b) => a.name.localeCompare(b.name)), [world, gender])
   const confirmedCount = moves.filter(m => m.confirmed).length
 
+  const { visible, more } = useShowMore(rows)
   return <>
     <h1>Transfers</h1>
     <p className="sub">Squad changes between your saves, merged with the transfer news the game recorded. Shows the most recent import window by default, so moves you have already seen don't pile up — switch to the whole career or an earlier window below. Live Editor moves appear too; the game never logs those, but the squads still change.</p>
@@ -138,7 +143,7 @@ export function Transfers({ world, gameId, refresh, openClub, pick }: { world: W
     {snaps.length < 2 && <p className="sub">Only one save is imported for this game, so the list shows the transfer news held in that save ({confirmedCount} rows). Import a later save to see every squad change between the two.</p>}
     {rows.length === 0 ? <p className="dim">No moves match these filters.</p> :
       <Table className="tbl"><thead><tr><th className="num">#</th><th>Player</th><th>Pos</th><th className="num">Age</th><th className="num">OVR</th><th className="num">POT</th><th>From</th><th>To</th><th className="num">Value</th><th>When</th></tr></thead><tbody>
-        {rows.slice(0, 300).map((m, i) => <tr key={m.id} className="click" onClick={() => pick(m.playerId)}>
+        {visible.map((m, i) => <tr key={m.id} className="click" onClick={() => pick(m.playerId)}>
           <td className="num dim">{i + 1}</td>
           <td className="name">{m.name}{m.kind === 'released' && <span className="tag">released</span>}{m.kind === 'signed' && <span className="tag">free signing</span>}</td>
           <td><span className={'pos ' + posGroup(m.pos).toLowerCase()}>{m.pos}</span></td>
@@ -149,5 +154,6 @@ export function Transfers({ world, gameId, refresh, openClub, pick }: { world: W
           <td className="when-cell">{m.date ? fmtDate(d8(m.date)) : <span className="dim">{m.window}</span>}{!m.confirmed && <small title="Squad change seen between two saves; the game logged no news for it — Live Editor edits look like this">not in game news</small>}</td>
         </tr>)}
       </tbody></Table>}
+    {rows.length > 0 && more}
   </>
 }
